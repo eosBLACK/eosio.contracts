@@ -10,6 +10,11 @@ void member::setcriteria( name member_type, asset low_quantity, asset high_quant
     // check overlap range, don't permit
     
     require_auth(_self);
+    char buffer[256];
+    sprintf(buffer, "member_type is %s or %s or %s", members_str[participants], members_str[supporters], members_str[reprecandi]);
+    check( member_type.to_string().compare(members_str[participants]) == 0 ||
+            member_type.to_string().compare(members_str[supporters]) == 0 ||
+            member_type.to_string().compare(members_str[reprecandi]) == 0, buffer );
     
     criteria_table criteria_t(_self, _self.value);
     
