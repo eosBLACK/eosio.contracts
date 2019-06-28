@@ -90,11 +90,11 @@ std::array<uint64_t, 2> member::get_criteria_range(string target) {
 string member::get_member_type(uint64_t staking_sum) {
    std::array<uint64_t, 2> criterias_participants;
    std::array<uint64_t, 2> criterias_supporters;
-   std::array<uint64_t, 2> criterias_represents;
+   std::array<uint64_t, 2> criterias_represent_candidates;
    
    criterias_participants = get_criteria_range(members_str[participants]);
    criterias_supporters = get_criteria_range(members_str[supporters]);
-   criterias_represents = get_criteria_range(members_str[represent_candi]);
+   criterias_represent_candidates = get_criteria_range(members_str[reprecandi]);
    
    string update_mem_type;
    
@@ -102,8 +102,8 @@ string member::get_member_type(uint64_t staking_sum) {
        update_mem_type = members_str[participants];
    } else if (criterias_supporters.at(0) <= staking_sum && staking_sum <= criterias_supporters.at(1)) {
        update_mem_type = members_str[supporters];
-   } else if (criterias_represents.at(0) <= staking_sum) {
-       update_mem_type = members_str[represent_candi];
+   } else if (criterias_represent_candidates.at(0) <= staking_sum) {
+       update_mem_type = members_str[reprecandi];
    } 
    
    return update_mem_type;
@@ -129,8 +129,6 @@ uint64_t member::get_staking_sum(name account) {
 }
 
 void member::update_member_type(string old_type, string new_type, name account) {
-    //if (new_type.compare(old_type) == 0) return;
-    
     participant_table participant_t(_self, _self.value);
     supporter_table supporter_t(_self, _self.value);
     representative_candidate_table representative_candidate_t(_self, _self.value);
@@ -147,7 +145,7 @@ void member::update_member_type(string old_type, string new_type, name account) 
         } else {
             supporter_t.erase(type);        
         }          
-    } else if (old_type.compare(members_str[represent_candi]) == 0) {
+    } else if (old_type.compare(members_str[reprecandi]) == 0) {
         auto type =  representative_candidate_t.find(account.value);
         if (type == representative_candidate_t.end()) {
         } else {
@@ -169,7 +167,7 @@ void member::update_member_type(string old_type, string new_type, name account) 
                a.account = account;
             });               
         }      
-    } else if (new_type.compare(members_str[represent_candi]) == 0) {
+    } else if (new_type.compare(members_str[reprecandi]) == 0) {
         auto type =  representative_candidate_t.find(account.value);
         if (type == representative_candidate_t.end()) {
             representative_candidate_t.emplace(_self, [&](auto& a) {

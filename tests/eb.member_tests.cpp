@@ -22,7 +22,7 @@ using namespace eosio_system;
 
 class eb_member_tester : public eosio_system_tester {
 public:
-   enum members { participants, supporters, represent_candi };
+   enum members { participants, supporters, reprecandi };
    const char *members_str[4]={ "participants","supporters", "reprecandi" }; 
 
    eb_member_tester() {
@@ -131,10 +131,10 @@ public:
          ("high_quantity", supporter_high)
       );   
       
-      BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[represent_candi]), asset::from_string(representative_low), asset::from_string(representative_high)) );
-      criteria = get_criteria(name(members_str[represent_candi]));
+      BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[reprecandi]), asset::from_string(representative_low), asset::from_string(representative_high)) );
+      criteria = get_criteria(name(members_str[reprecandi]));
       REQUIRE_MATCHING_OBJECT( criteria, mvo()
-         ("member_type", members_str[represent_candi])
+         ("member_type", members_str[reprecandi])
          ("low_quantity", representative_low)
          ("high_quantity", representative_high)
       );       
@@ -218,10 +218,10 @@ BOOST_FIXTURE_TEST_CASE( member_criteria, eb_member_tester ) try {
                   "31.0000 BLACK", "100.0000 BLACK", 
                   "101.0000 BLACK", "300.0000 BLACK");
    
-   BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[represent_candi]), asset::from_string("101.0000 BLACK"), asset::from_string("200.0000 BLACK")) );
-   auto criteria = get_criteria(name(members_str[represent_candi]));
+   BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[reprecandi]), asset::from_string("101.0000 BLACK"), asset::from_string("200.0000 BLACK")) );
+   auto criteria = get_criteria(name(members_str[reprecandi]));
    REQUIRE_MATCHING_OBJECT( criteria, mvo()
-      ("member_type", members_str[represent_candi])
+      ("member_type", members_str[reprecandi])
       ("low_quantity", "101.0000 BLACK")
       ("high_quantity", "200.0000 BLACK")
    );    

@@ -71,7 +71,7 @@ namespace eosio {
       public:
          using contract::contract;
          
-         enum members { participants, supporters, represent_candi };
+         enum members { participants, supporters, reprecandi };
          const char *members_str[4]={ "participants","supporters", "reprecandi" }; 
 
          [[eosio::action]]
