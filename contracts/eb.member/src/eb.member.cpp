@@ -94,7 +94,7 @@ string member::get_member_type(uint64_t staking_sum) {
    
    criterias_participants = get_criteria_range(members_str[participants]);
    criterias_supporters = get_criteria_range(members_str[supporters]);
-   criterias_represents = get_criteria_range(members_str[represent]);
+   criterias_represents = get_criteria_range(members_str[represent_candi]);
    
    string update_mem_type;
    
@@ -134,7 +134,6 @@ void member::update_member_type(string old_type, string new_type, name account) 
     participant_table participant_t(_self, _self.value);
     supporter_table supporter_t(_self, _self.value);
     representative_candidate_table representative_candidate_t(_self, _self.value);
-    representative_table representative_t(_self, _self.value);
     
     if (old_type.compare(members_str[participants]) == 0) {
         auto type =  participant_t.find(account.value);

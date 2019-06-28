@@ -22,8 +22,8 @@ using namespace eosio_system;
 
 class eb_member_tester : public eosio_system_tester {
 public:
-   enum members { participants, supporters, represent };
-   const char *members_str[3]={ "participants","supporters","represent" };   
+   enum members { participants, supporters, represent_candi };
+   const char *members_str[4]={ "participants","supporters", "reprecandi" }; 
 
    eb_member_tester() {
       produce_blocks( 2 );
@@ -111,12 +111,6 @@ public:
       vector<char> data = get_row_by_account( N(eb.member), N(eb.member), N(reprecandi), account.value );  
       return data.empty() ? fc::variant() : member_abi_ser.binary_to_variant( "representative_candidate", data, abi_serializer_max_time );
    }
-   
-   fc::variant get_representative(const name& account)
-   {
-      vector<char> data = get_row_by_account( N(eb.member), N(eb.member), N(repre), account.value );  
-      return data.empty() ? fc::variant() : member_abi_ser.binary_to_variant( "representative", data, abi_serializer_max_time );
-   }
 
    void init_criteria(string participant_low, string participant_high, 
                      string supporter_low, string supporter_high,
@@ -137,10 +131,10 @@ public:
          ("high_quantity", supporter_high)
       );   
       
-      BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[represent]), asset::from_string(representative_low), asset::from_string(representative_high)) );
-      criteria = get_criteria(name(members_str[represent]));
+      BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[represent_candi]), asset::from_string(representative_low), asset::from_string(representative_high)) );
+      criteria = get_criteria(name(members_str[represent_candi]));
       REQUIRE_MATCHING_OBJECT( criteria, mvo()
-         ("member_type", members_str[represent])
+         ("member_type", members_str[represent_candi])
          ("low_quantity", representative_low)
          ("high_quantity", representative_high)
       );       
@@ -224,10 +218,10 @@ BOOST_FIXTURE_TEST_CASE( member_criteria, eb_member_tester ) try {
                   "31.0000 BLACK", "100.0000 BLACK", 
                   "101.0000 BLACK", "300.0000 BLACK");
    
-   BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[represent]), asset::from_string("101.0000 BLACK"), asset::from_string("200.0000 BLACK")) );
-   auto criteria = get_criteria(name(members_str[represent]));
+   BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[represent_candi]), asset::from_string("101.0000 BLACK"), asset::from_string("200.0000 BLACK")) );
+   auto criteria = get_criteria(name(members_str[represent_candi]));
    REQUIRE_MATCHING_OBJECT( criteria, mvo()
-      ("member_type", members_str[represent])
+      ("member_type", members_str[represent_candi])
       ("low_quantity", "101.0000 BLACK")
       ("high_quantity", "200.0000 BLACK")
    );    

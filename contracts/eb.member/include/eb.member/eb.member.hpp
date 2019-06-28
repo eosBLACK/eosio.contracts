@@ -46,15 +46,7 @@ namespace eosio {
       
       EOSLIB_SERIALIZE( representative_candidate, (account) )
    };    
-   
-   struct [[eosio::table,eosio::contract("eb.member")]] representative {
-      name account;
 
-      uint64_t primary_key() const {return account.value;}
-      
-      EOSLIB_SERIALIZE( representative, (account) )
-   };  
-   
    struct [[eosio::table, eosio::contract("eosio.system")]] user_resources {
       name          owner;
       asset         net_weight;
@@ -72,7 +64,6 @@ namespace eosio {
    typedef eosio::multi_index< "participants"_n, participant > participant_table;
    typedef eosio::multi_index< "supporters"_n, supporter > supporter_table;
    typedef eosio::multi_index< "reprecandi"_n, representative_candidate > representative_candidate_table;
-   typedef eosio::multi_index< "repre"_n, representative > representative_table;
    
    typedef eosio::multi_index< "userres"_n, user_resources > user_resources_table;
 
@@ -80,8 +71,8 @@ namespace eosio {
       public:
          using contract::contract;
          
-         enum members { participants, supporters, represent_candi, represent };
-         const char *members_str[4]={ "participants","supporters", "reprecandi", "represent" }; 
+         enum members { participants, supporters, represent_candi };
+         const char *members_str[4]={ "participants","supporters", "reprecandi" }; 
 
          [[eosio::action]]
          void setcriteria( name member_type,
