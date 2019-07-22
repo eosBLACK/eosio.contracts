@@ -96,19 +96,19 @@ public:
 
    fc::variant get_participant(const name& account)
    {
-      vector<char> data = get_row_by_account( N(eb.member), N(eb.member), N(participants), account.value );  
+      vector<char> data = get_row_by_account( N(eb.member), account, N(participants), account.value );  
       return data.empty() ? fc::variant() : member_abi_ser.binary_to_variant( "participant", data, abi_serializer_max_time );
    }
    
    fc::variant get_supporter(const name& account)
    {
-      vector<char> data = get_row_by_account( N(eb.member), N(eb.member), N(supporters), account.value );  
+      vector<char> data = get_row_by_account( N(eb.member), account, N(supporters), account.value );  
       return data.empty() ? fc::variant() : member_abi_ser.binary_to_variant( "supporter", data, abi_serializer_max_time );
    }
    
    fc::variant get_representative_candidate(const name& account)
    {
-      vector<char> data = get_row_by_account( N(eb.member), N(eb.member), N(reprecandi), account.value );  
+      vector<char> data = get_row_by_account( N(eb.member), account, N(reprecandi), account.value );  
       return data.empty() ? fc::variant() : member_abi_ser.binary_to_variant( "representative_candidate", data, abi_serializer_max_time );
    }
 
@@ -338,6 +338,120 @@ BOOST_FIXTURE_TEST_CASE( member_level_change_by_staking_unstaking, eb_member_tes
    BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
    BOOST_REQUIRE_EQUAL( true, get_supporter(name("alice1111111")).is_null() );
    BOOST_REQUIRE_EQUAL( true, get_representative_candidate(name("alice1111111")).is_null() );  
+} FC_LOG_AND_RETHROW() 
+
+
+BOOST_FIXTURE_TEST_CASE( member_delete_table, eb_member_tester ) try {
+   cross_15_percent_threshold();
+
+   produce_blocks( 10 );
+   produce_block( fc::hours(3*24) );
+   
+   // participant: 50 ~ 99
+   // supporter: 100 ~ 199
+   // representative_candidate: 200 ~ 500
+   init_criteria("50.0000 BLACK", "99.0000 BLACK", 
+                  "100.0000 BLACK", "199.0000 BLACK", 
+                  "200.0000 BLACK", "500.0000 BLACK");  
+
+   // pre-condition
+   // init staking amount: 20
+   BOOST_REQUIRE_EQUAL( core_sym::from_string("0.0000"), get_balance( "alice1111111" ) );
+   transfer( "eosio", "alice1111111", core_sym::from_string("5000.0000"), "eosio" );
+   BOOST_REQUIRE_EQUAL( core_sym::from_string("5000.0000"), get_balance( "alice1111111" ) );
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_supporter(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_representative_candidate(name("alice1111111")).is_null() );
+
+   // total staking amount: 30
+   BOOST_REQUIRE_EQUAL( success(), stake_eb( "alice1111111", "alice1111111", core_sym::from_string("5.0000"), core_sym::from_string("5.0000") ) );
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_supporter(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_representative_candidate(name("alice1111111")).is_null() );
+   
+   // total staking amount: 50
+   BOOST_REQUIRE_EQUAL( success(), stake_eb( "alice1111111", "alice1111111", core_sym::from_string("10.0000"), core_sym::from_string("10.0000") ) );
+   auto member = get_participant(name("alice1111111"));
+   REQUIRE_MATCHING_OBJECT( member, mvo()
+      ("account", "alice1111111")
+   );    
+   BOOST_REQUIRE_EQUAL( true, get_supporter(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_representative_candidate(name("alice1111111")).is_null() );
+   
+   // total staking amount: 100
+   BOOST_REQUIRE_EQUAL( success(), stake_eb( "alice1111111", "alice1111111", core_sym::from_string("25.0000"), core_sym::from_string("25.0000") ) );
+   member = get_supporter(name("alice1111111"));
+   REQUIRE_MATCHING_OBJECT( member, mvo()
+      ("account", "alice1111111")
+   );    
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_representative_candidate(name("alice1111111")).is_null() );
+   
+   // total staking amount: 199
+   BOOST_REQUIRE_EQUAL( success(), stake_eb( "alice1111111", "alice1111111", core_sym::from_string("50.0000"), core_sym::from_string("49.0000") ) );
+   member = get_supporter(name("alice1111111"));
+   REQUIRE_MATCHING_OBJECT( member, mvo()
+      ("account", "alice1111111")
+   );    
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_representative_candidate(name("alice1111111")).is_null() );
+   
+   
+   // total staking amount: 200
+   BOOST_REQUIRE_EQUAL( success(), stake_eb( "alice1111111", "alice1111111", core_sym::from_string("1.0000"), core_sym::from_string("0.0000") ) );
+   member = get_representative_candidate(name("alice1111111"));
+   REQUIRE_MATCHING_OBJECT( member, mvo()
+      ("account", "alice1111111")
+   );  
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_supporter(name("alice1111111")).is_null() );
+   
+   // total staking amount: 1000
+   BOOST_REQUIRE_EQUAL( success(), stake_eb( "alice1111111", "alice1111111", core_sym::from_string("400.0000"), core_sym::from_string("400.0000") ) );
+   member = get_representative_candidate(name("alice1111111"));
+   REQUIRE_MATCHING_OBJECT( member, mvo()
+      ("account", "alice1111111")
+   );  
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_supporter(name("alice1111111")).is_null() );   
+   
+   // total staking amount: 500
+   BOOST_REQUIRE_EQUAL( success(), unstake_eb( "alice1111111", "alice1111111", core_sym::from_string("250.0000"), core_sym::from_string("250.0000") ) );
+   member = get_representative_candidate(name("alice1111111"));
+   REQUIRE_MATCHING_OBJECT( member, mvo()
+      ("account", "alice1111111")
+   );  
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_supporter(name("alice1111111")).is_null() );     
+   
+   // total staking amount: 199
+   BOOST_REQUIRE_EQUAL( success(), unstake_eb( "alice1111111", "alice1111111", core_sym::from_string("150.0000"), core_sym::from_string("151.0000") ) );
+   member = get_supporter(name("alice1111111"));
+   REQUIRE_MATCHING_OBJECT( member, mvo()
+      ("account", "alice1111111")
+   );  
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_representative_candidate(name("alice1111111")).is_null() );   
+   
+   // total staking amount: 49
+   /*
+   BOOST_REQUIRE_EQUAL( success(), unstake_eb( "alice1111111", "alice1111111", core_sym::from_string("75.0000"), core_sym::from_string("75.0000") ) );
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_supporter(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_representative_candidate(name("alice1111111")).is_null() ); 
+   */
+   
+   
+   base_tester::push_action( N(eb.member), N(deletetables), N(eb.member), mvo()
+      ("target_scope", "alice1111111")
+   );
+   
+   
+   
+   BOOST_REQUIRE_EQUAL( true, get_participant(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_supporter(name("alice1111111")).is_null() );
+   BOOST_REQUIRE_EQUAL( true, get_representative_candidate(name("alice1111111")).is_null() ); 
+   
 } FC_LOG_AND_RETHROW() 
 
 BOOST_AUTO_TEST_SUITE_END()
