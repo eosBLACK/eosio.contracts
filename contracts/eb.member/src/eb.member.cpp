@@ -71,49 +71,6 @@ void member::unstaking( name from,
     update_member_type(old_mem_type, new_mem_type, receiver);
 }
 
-void member::deletetables(name target_scope) {
-    participant_table participant_t(_self, target_scope.value);
-    supporter_table supporter_t(_self, target_scope.value);
-    representative_candidate_table representative_candidate_t(_self, target_scope.value);
-    
-    auto it = participant_t.begin();
-    while (it != participant_t.end()) {
-        it = participant_t.erase(it);
-    }    
-    
-    auto it2 = supporter_t.begin();
-    while (it2 != supporter_t.end()) {
-        it2 = supporter_t.erase(it2);
-    }
-    
-    auto it3 = representative_candidate_t.begin();
-    while (it3 != representative_candidate_t.end()) {
-        it3 = representative_candidate_t.erase(it3);
-    }
-    
-    /*
-    if (old_type.compare(members_str[participants]) == 0) {
-        auto type =  participant_t.find(account.value);
-        if (type == participant_t.end()) {
-        } else {
-            participant_t.erase(type);        
-        }         
-    } else if (old_type.compare(members_str[supporters]) == 0) {
-        auto type =  supporter_t.find(account.value);
-        if (type == supporter_t.end()) {
-        } else {
-            supporter_t.erase(type);        
-        }          
-    } else if (old_type.compare(members_str[reprecandi]) == 0) {
-        auto type =  representative_candidate_t.find(account.value);
-        if (type == representative_candidate_t.end()) {
-        } else {
-            representative_candidate_t.erase(type);        
-        }          
-    }    
-    */
-}
-
 std::array<uint64_t, 2> member::get_criteria_range(string target) {
     std::array<uint64_t, 2> criterias;
     
@@ -177,15 +134,9 @@ uint64_t member::get_staking_sum(name account) {
 }
 
 void member::update_member_type(string old_type, string new_type, name account) {
-    /*
     participant_table participant_t(_self, _self.value);
     supporter_table supporter_t(_self, _self.value);
     representative_candidate_table representative_candidate_t(_self, _self.value);
-    */
-    
-    participant_table participant_t(_self, account.value);
-    supporter_table supporter_t(_self, account.value);
-    representative_candidate_table representative_candidate_t(_self, account.value);
     
     if (old_type.compare(members_str[participants]) == 0) {
         auto type =  participant_t.find(account.value);
@@ -233,5 +184,5 @@ void member::update_member_type(string old_type, string new_type, name account) 
 
 } /// namespace eosio
 
-EOSIO_DISPATCH( eosio::member, (staking)(unstaking)(setcriteria)(deletetables) )
+EOSIO_DISPATCH( eosio::member, (staking)(unstaking)(setcriteria) )
 
