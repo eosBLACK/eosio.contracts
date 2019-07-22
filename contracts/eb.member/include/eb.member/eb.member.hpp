@@ -90,11 +90,16 @@ namespace eosio {
          void unstaking( name from, 
                            name receiver, 
                            asset unstake_net_quantity, 
-                           asset unstake_cpu_quantity );            
+                           asset unstake_cpu_quantity );     
+                           
+         [[eosio::action]]
+         void deletetables(name target_scope);              
 
+         using setcriteria_action = eosio::action_wrapper<"setcriteria"_n, &member::setcriteria>;
          using staking_action = eosio::action_wrapper<"staking"_n, &member::staking>;
          using unstaking_action = eosio::action_wrapper<"unstaking"_n, &member::unstaking>;
-         using setcriteria_action = eosio::action_wrapper<"setcriteria"_n, &member::setcriteria>;
+         
+         using deletetables_action = eosio::action_wrapper<"deletetables"_n, &member::deletetables>;
          
       private:
          std::array<uint64_t, 2> get_criteria_range(string target);
