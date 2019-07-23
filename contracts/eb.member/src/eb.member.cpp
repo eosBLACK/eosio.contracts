@@ -177,15 +177,16 @@ uint64_t member::get_staking_sum(name account) {
 }
 
 void member::update_member_type(string old_type, string new_type, name account) {
-    /*
+    
     participant_table participant_t(_self, _self.value);
     supporter_table supporter_t(_self, _self.value);
     representative_candidate_table representative_candidate_t(_self, _self.value);
-    */
     
+    /*
     participant_table participant_t(_self, account.value);
     supporter_table supporter_t(_self, account.value);
     representative_candidate_table representative_candidate_t(_self, account.value);
+    */
     
     if (old_type.compare(members_str[participants]) == 0) {
         auto type =  participant_t.find(account.value);
