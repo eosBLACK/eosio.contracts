@@ -1,33 +1,33 @@
 #include <boost/test/unit_test.hpp>
-#include <eosio/chain/contract_table_objects.hpp>
-#include <eosio/chain/global_property_object.hpp>
-#include <eosio/chain/resource_limits.hpp>
+#include <eosio/testing/tester.hpp>
+#include <eosio/chain/abi_serializer.hpp>
 #include <eosio/chain/wast_to_wasm.hpp>
-#include <cstdlib>
-#include <iostream>
-#include <sstream>
-#include <fc/log/logger.hpp>
-#include <eosio/chain/exceptions.hpp>
+
 #include <Runtime/Runtime.h>
 
-#include "eosio.system_tester.hpp"
+#include <fc/variant_object.hpp>
+#include "contracts.hpp"
+#include "test_symbol.hpp"
 
-struct _abi_hash {
-   name owner;
-   fc::sha256 hash;
-};
-FC_REFLECT( _abi_hash, (owner)(hash) );
+using namespace eosio::testing;
+using namespace eosio;
+using namespace eosio::chain;
+using namespace eosio::testing;
+using namespace fc;
 
-using namespace eosio_system;
+using mvo = fc::mutable_variant_object;
 
-class eb_factory_tester : public eosio_system_tester {
+class eb_factory_tester : public tester {
 public:
    eb_factory_tester() {
-      produce_blocks( 2 );
+      create_accounts( { N(eb.factory), N(eosio.msig), N(eosio.stake), N(eosio.ram), N(eosio.ramfee), N(alice), N(bob), N(carol) } );
+      produce_block();      
+      
+      //produce_blocks( 2 );
 
-      create_account_with_resources( N(eb.factory), config::system_account_name, core_sym::from_string("20.0000"), false );
+      //create_account_with_resources( N(eb.factory), config::system_account_name, core_sym::from_string("20.0000"), false );
 
-      produce_blocks( 100 );      
+      //produce_blocks( 100 );      
       
       set_code( N(eb.factory), contracts::factory_wasm());
       set_abi( N(eb.factory), contracts::factory_abi().data() );
@@ -46,7 +46,115 @@ public:
          );
       } 
    }
-   
+
+   transaction_trace_ptr create_account_with_resources( account_name a, account_name creator, asset ramfunds, bool multisig,
+                                                        asset net = core_sym::from_string("10.0000"), asset cpu = core_sym::from_string("10.0000") ) {
+      signed_transaction trx;
+      set_transaction_headers(trx);
+
+      authority owner_auth;
+      if (multisig) {
+         // multisig between account's owner key and creators active permission
+         owner_auth = authority(2, {key_weight{get_public_key( a, "owner" ), 1}}, {permission_level_weight{{creator, config::active_name}, 1}});
+      } else {
+         owner_auth =  authority( get_public_key( a, "owner" ) );
+      }
+
+      trx.actions.emplace_back( vector<permission_level>{{creator,config::active_name}},
+                                newaccount{
+                                   .creator  = creator,
+                                   .name     = a,
+                                   .owner    = owner_auth,
+                                   .active   = authority( get_public_key( a, "active" ) )
+                                });
+
+      trx.actions.emplace_back( get_action( N(eosio), N(buyram), vector<permission_level>{{creator,config::active_name}},
+                                            mvo()
+                                            ("payer", creator)
+                                            ("receiver", a)
+                                            ("quant", ramfunds) )
+                              );
+
+      trx.actions.emplace_back( get_action( N(eosio), N(delegatebw), vector<permission_level>{{creator,config::active_name}},
+                                            mvo()
+                                            ("from", creator)
+                                            ("receiver", a)
+                                            ("stake_net_quantity", net )
+                                            ("stake_cpu_quantity", cpu )
+                                            ("transfer", 0 )
+                                          )
+                                );
+
+      set_transaction_headers(trx);
+      trx.sign( get_private_key( creator, "active" ), control->get_chain_id()  );
+      return push_transaction( trx );
+   }
+   void create_currency( name contract, name manager, asset maxsupply ) {
+      auto act =  mutable_variant_object()
+         ("issuer",       manager )
+         ("maximum_supply", maxsupply );
+
+      base_tester::push_action(contract, N(create), contract, act );
+   }
+   void issue( name to, const asset& amount, name manager = config::system_account_name ) {
+      base_tester::push_action( N(eosio.token), N(issue), manager, mutable_variant_object()
+                                ("to",      to )
+                                ("quantity", amount )
+                                ("memo", "")
+                                );
+   }
+   void transfer( name from, name to, const string& amount, name manager = config::system_account_name ) {
+      base_tester::push_action( N(eosio.token), N(transfer), manager, mutable_variant_object()
+                                ("from",    from)
+                                ("to",      to )
+                                ("quantity", asset::from_string(amount) )
+                                ("memo", "")
+                                );
+   }
+   asset get_balance( const account_name& act ) {
+      //return get_currency_balance( config::system_account_name, symbol(CORE_SYMBOL), act );
+      //temporary code. current get_currency_balancy uses table name N(accounts) from currency.h
+      //generic_currency table name is N(account).
+      const auto& db  = control->db();
+      const auto* tbl = db.find<table_id_object, by_code_scope_table>(boost::make_tuple(N(eosio.token), act, N(accounts)));
+      share_type result = 0;
+
+      // the balance is implied to be 0 if either the table or row does not exist
+      if (tbl) {
+         const auto *obj = db.find<key_value_object, by_scope_primary>(boost::make_tuple(tbl->id, symbol(CORE_SYM).to_symbol_code()));
+         if (obj) {
+            // balance is the first field in the serialization
+            fc::datastream<const char *> ds(obj->value.data(), obj->value.size());
+            fc::raw::unpack(ds, result);
+         }
+      }
+      return asset( result, symbol(CORE_SYM) );
+   }
+
+   transaction_trace_ptr push_action( const account_name& signer, const action_name& name, const variant_object& data, bool auth = true ) {
+      vector<account_name> accounts;
+      if( auth )
+         accounts.push_back( signer );
+      auto trace = base_tester::push_action( N(eosio.msig), name, accounts, data );
+      produce_block();
+      BOOST_REQUIRE_EQUAL( true, chain_has_transaction(trace->id) );
+      return trace;
+
+      /*
+         string action_type_name = abi_ser.get_action_type(name);
+
+         action act;
+         act.account = N(eosio.msig);
+         act.name = name;
+         act.data = abi_ser.variant_to_binary( action_type_name, data, abi_serializer_max_time );
+         //std::cout << "test:\n" << fc::to_hex(act.data.data(), act.data.size()) << " size = " << act.data.size() << std::endl;
+
+         return base_tester::push_action( std::move(act), auth ? uint64_t(signer) : 0 );
+      */
+   }
+
+   transaction reqauth( account_name from, const vector<permission_level>& auths, const fc::microseconds& max_serialization_time );
+
    action_result push_action_eb( const account_name& signer, const action_name &name, const variant_object &data, bool auth = true ) {
          string action_type_name = factory_abi_ser.get_action_type(name);
 
@@ -55,7 +163,7 @@ public:
          act.name = name;
          act.data = factory_abi_ser.variant_to_binary( action_type_name, data, abi_serializer_max_time );
 
-         return base_tester::push_action( std::move(act), auth ? uint64_t(signer) : signer == N(bob111111111) ? N(alice1111111) : N(bob111111111) );
+         return base_tester::push_action( std::move(act), auth ? uint64_t(signer) : signer == N(bob) ? N(alice) : N(bob) );
    }
 
    action_result create_eb( const account_name& owner, 
@@ -169,45 +277,73 @@ public:
    abi_serializer factory_abi_ser;
 };
 
+transaction eb_factory_tester::reqauth( account_name from, const vector<permission_level>& auths, const fc::microseconds& max_serialization_time ) {
+   fc::variants v;
+   for ( auto& level : auths ) {
+      v.push_back(fc::mutable_variant_object()
+                  ("actor", level.actor)
+                  ("permission", level.permission)
+      );
+   }
+   variant pretty_trx = fc::mutable_variant_object()
+      ("expiration", "2020-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name(config::system_account_name))
+               ("name", "reqauth")
+               ("authorization", v)
+               ("data", fc::mutable_variant_object() ("from", from) )
+               })
+      );
+   transaction trx;
+   abi_serializer::from_variant(pretty_trx, trx, get_resolver(), max_serialization_time);
+   return trx;
+}
+
 BOOST_AUTO_TEST_SUITE(eb_factory_tests)
 
 BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
-   cross_15_percent_threshold();
+   // cross_15_percent_threshold();
 
    produce_blocks( 10 );
    produce_block( fc::hours(3*24) );
 
-   BOOST_REQUIRE_EQUAL( core_sym::from_string("0.0000"), get_balance( "alice1111111" ) );
-   transfer( "eosio", "alice1111111", core_sym::from_string("1000.0000"), "eosio" );
+   BOOST_REQUIRE_EQUAL( core_sym::from_string("0.0000"), get_balance( "alice" ) );
+   //transfer( "eosio", "alice", "1000.0000 BLACK", "eosio" );
    
-   string proj_1_owner = "alice1111111";
+   string proj_1_owner = "alice";
    string proj_1_name = "test_1_project";
    string proj_1_url = "www.test_1.io";
    string proj_1_hash = "test_1_hash";
    string proj_1_homepage = "www.homepage_1.com";
    string proj_1_icon = "www.icon_1.io";
-   string proj_1_helper = "alice1111111";
+   string proj_1_helper = "alice";
    
    string proj_1_url_update = "www.test_1_2.io";
    string proj_1_hash_update = "test_1_2_hash";
    string proj_1_homepage_update = "www.homepage_1_2.com";
    string proj_1_icon_update = "www.icon_1_2.io";
    
-   string proj_2_owner = "bob111111111";
+   string proj_2_owner = "bob";
    string proj_2_name = "test_2_project";
    string proj_2_url = "www.test_2.io";
    string proj_2_hash = "test_2_hash";
    string proj_2_homepage = "www.homepage_2.com";
    string proj_2_icon = "www.icon_2.io";
-   string proj_2_helper = "bob111111111";   
+   string proj_2_helper = "bob";   
    
-   string proj_3_owner = "carol1111111";
+   string proj_3_owner = "carol";
    string proj_3_name = "test_3_project";
    string proj_3_url = "www.test_3.io";
    string proj_3_hash = "test_3_hash";
    string proj_3_homepage = "www.homepage_3.com";
    string proj_3_icon = "www.icon_3.io";
-   string proj_3_helper = "carol1111111";      
+   string proj_3_helper = "carol";      
    
    ///////////////////////////////////                   
    // create & add & remove & check //
@@ -413,7 +549,7 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
    ////////////////////
    // drop is failed //
    ////////////////////
-   BOOST_REQUIRE_EQUAL("missing authority of alice1111111", 
+   BOOST_REQUIRE_EQUAL("missing authority of alice", 
                         drop_eb(name(proj_2_owner), project_1_index, "created"));   
    BOOST_REQUIRE_EQUAL(wasm_assert_msg("project doesn't exist"), 
                         drop_eb(name(proj_1_owner), project_4_index, "created"));   
