@@ -13,20 +13,22 @@ namespace eosio {
    using std::string;
    
    struct [[eosio::table,eosio::contract("eb.factory")]] project {
-      int64_t index;
+      uint64_t index;
       name owner;
-      string name;
-      int64_t current_detail_index;
-      int64_t current_resource_index;
+      string proj_name;
+      checksum256 proj_name_hash;
+      uint64_t current_detail_index;
+      uint64_t current_resource_index;
       
       uint64_t primary_key() const {return index;}
+      checksum256 by_proj_name_hash() const {return proj_name_hash;}
       
-      EOSLIB_SERIALIZE( project, (index)(owner)(name)(current_detail_index)(current_resource_index) )
+      EOSLIB_SERIALIZE( project, (index)(owner)(proj_name)(proj_name_hash)(current_detail_index)(current_resource_index) )
    };
    
    struct [[eosio::table,eosio::contract("eb.factory")]] projectinfo {
-      int64_t index;
-      int64_t updatetime;
+      uint64_t index;
+      uint32_t updatetime;
       string url;
       string hash;
       string homepage;
@@ -39,9 +41,9 @@ namespace eosio {
    };   
    
    struct [[eosio::table,eosio::contract("eb.factory")]] resource {
-      int64_t index;
-      int64_t ram_max_size;
-      int64_t black_max_count;
+      uint64_t index;
+      uint64_t ram_max_size;
+      asset black_max_count;
 
       uint64_t primary_key() const {return index;}
       
@@ -49,16 +51,17 @@ namespace eosio {
    };
    
    struct [[eosio::table,eosio::contract("eb.factory")]] payment {
-      int64_t aftertime;
+      uint64_t index;
+      uint64_t aftertime;
       int8_t percentage;
 
-      uint64_t primary_key() const {return aftertime;}
+      uint64_t primary_key() const {return index;}
       
-      EOSLIB_SERIALIZE( payment, (aftertime)(percentage) )
+      EOSLIB_SERIALIZE( payment, (index)(aftertime)(percentage) )
    };  
    
    struct [[eosio::table,eosio::contract("eb.factory")]] helper {
-      int64_t project_index;
+      uint64_t project_index;
       name helper_name;
       bool isrewarded;
 
@@ -68,7 +71,7 @@ namespace eosio {
    };   
    
    struct [[eosio::table,eosio::contract("eb.factory")]] suggest {
-      int64_t project_index;
+      uint64_t project_index;
       name proposer;
       string proposal;
 
@@ -77,7 +80,7 @@ namespace eosio {
       EOSLIB_SERIALIZE( suggest, (project_index)(proposer)(proposal) )
    };   
 
-   typedef eosio::multi_index< "projects"_n, project > project_table;
+   typedef eosio::multi_index< "projects"_n, project, indexed_by<name("projnamehash"), const_mem_fun<project, checksum256, &project::by_proj_name_hash>> > project_table;
    typedef eosio::multi_index< "projectinfos"_n, projectinfo > projectinfo_table;
    typedef eosio::multi_index< "resources"_n, resource > resource_table;
    typedef eosio::multi_index< "payments"_n, payment > payment_table;
@@ -98,7 +101,7 @@ namespace eosio {
                      name helper);
          
          [[eosio::action]]
-         void addinfo(int64_t project_index,
+         void addinfo(uint64_t project_index,
                         string url,
                         string hash,
                         string homepage,
@@ -106,51 +109,51 @@ namespace eosio {
                         name helper);
          
          [[eosio::action]]
-         void addresource(int64_t project_index,
-                           int64_t ram_max_size,
-                           int64_t black_max_count);
+         void addresource(uint64_t project_index,
+                           uint64_t ram_max_size,
+                           asset black_max_count);
          
          [[eosio::action]]
-         void rmresource(int64_t project_index,
-                           int64_t resource_index);
+         void rmresource(uint64_t project_index,
+                           uint64_t resource_index);
          
          [[eosio::action]]
-         void addpayment(int64_t project_index,
-                           int64_t aftertime,
-                           int8_t percentage);
+         void addpayment(uint64_t project_index,
+                           uint64_t aftertime,
+                           uint8_t percentage);
          
          [[eosio::action]]
-         void rmpayment(int64_t project_index,
-                        int64_t aftertime);
+         void rmpayment(uint64_t project_index,
+                        uint64_t payment_index);
          
          [[eosio::action]]
-         void setready(int64_t project_index);
+         void setready(uint64_t project_index);
          
          [[eosio::action]]
-         void cancelready(int64_t project_index);
+         void cancelready(uint64_t project_index);
          
          [[eosio::action]]
-         void drop(int64_t project_index);
+         void drop(uint64_t project_index);
          
          [[eosio::action]]
-         void select(int64_t project_index,
-                     int64_t detail_index,
-                     int64_t resource_index,
+         void select(uint64_t project_index,
+                     uint64_t detail_index,
+                     uint64_t resource_index,
                      name helper);
          
          [[eosio::action]]
-         void start(int64_t project_index,
-                     int64_t detail_index,
-                     int64_t resource_index,
+         void start(uint64_t project_index,
+                     uint64_t detail_index,
+                     uint64_t resource_index,
                      name helper);
          
          [[eosio::action]]
-         void addsuggest(int64_t project_index,
+         void addsuggest(uint64_t project_index,
                            name proposer,
                            string proposal);
          
          [[eosio::action]]
-         void rmsuggest(int64_t project_index);
+         void rmsuggest(uint64_t project_index);
 
          using create_action = eosio::action_wrapper<"create"_n, &factory::create>;
          using addinfo_action = eosio::action_wrapper<"addinfo"_n, &factory::addinfo>;
@@ -167,7 +170,35 @@ namespace eosio {
          using rmsuggest_action = eosio::action_wrapper<"rmsuggest"_n, &factory::rmsuggest>;         
          
       private:
-         void test2();
+         const string STATE_CREATED = "created";
+         const string STATE_SELECTED = "selected";
+         const string STATE_READIED = "readied";
+         const string STATE_STARTED = "started";
+         const string STATE_DROPPED = "dropped";
+         const string STATE_NONE = "none";
+         
+         const uint64_t SCOPE_CREATED = name(STATE_CREATED).value;
+         const uint64_t SCOPE_SELECTED = name(STATE_SELECTED).value;
+         const uint64_t SCOPE_READIED = name(STATE_READIED).value;
+         const uint64_t SCOPE_STARTED = name(STATE_STARTED).value;
+         const uint64_t SCOPE_DROPPED = name(STATE_DROPPED).value;
+         const uint64_t SCOPE_NONE  = name(STATE_NONE).value;
+         
+         void addProjectInfo(name owner,
+                              uint64_t project_index,
+                              string url,
+                              string hash,
+                              string homepage,
+                              string icon,
+                              name helper);
+         
+         void cleanProject(uint64_t project_index);
+         void deleteProjectInfo(uint64_t project_index);
+         void deleteProjectResource(uint64_t project_index);
+         void deleteProjectPayment(uint64_t project_index);
+         void deleteProjectHelper(uint64_t project_index);
+         
+         uint64_t getProjectScope(uint64_t project_index);
    };
 
 } /// namespace eosio
