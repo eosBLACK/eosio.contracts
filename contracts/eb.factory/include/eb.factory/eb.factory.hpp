@@ -17,13 +17,15 @@ namespace eosio {
       name owner;
       string proj_name;
       checksum256 proj_name_hash;
-      uint64_t current_detail_index;
-      uint64_t current_resource_index;
+      uint64_t selected_detail_index;
+      uint64_t selected_resource_index;
+      uint64_t started_detail_index;
+      uint64_t started_resource_index;      
       
       uint64_t primary_key() const {return index;}
       checksum256 by_proj_name_hash() const {return proj_name_hash;}
       
-      EOSLIB_SERIALIZE( project, (index)(owner)(proj_name)(proj_name_hash)(current_detail_index)(current_resource_index) )
+      EOSLIB_SERIALIZE( project, (index)(owner)(proj_name)(proj_name_hash)(selected_detail_index)(selected_resource_index)(started_detail_index)(started_resource_index) )
    };
    
    struct [[eosio::table,eosio::contract("eb.factory")]] projectinfo {
@@ -127,7 +129,9 @@ namespace eosio {
                         uint64_t payment_index);
          
          [[eosio::action]]
-         void setready(uint64_t project_index);
+         void setready(uint64_t project_index,
+                        uint64_t detail_index,
+                        uint64_t resource_index);
          
          [[eosio::action]]
          void cancelready(uint64_t project_index);

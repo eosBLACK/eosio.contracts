@@ -45,6 +45,24 @@ public:
                                                ("is_priv", 1)
          );
       } 
+      
+      set_code( N(eosio.msig), contracts::msig_wasm() );
+      set_abi( N(eosio.msig), contracts::msig_abi().data() );
+      {
+         produce_blocks();
+         const auto& accnt = control->db().get<account_object,by_name>( N(eosio.msig) );
+         abi_def abi;
+         BOOST_REQUIRE_EQUAL(abi_serializer::to_abi(accnt.abi, abi), true);
+         msig_abi_ser.set_abi(abi, abi_serializer_max_time);
+      }
+      
+      {
+         auto trace = base_tester::push_action(config::system_account_name, N(setpriv),
+                                               config::system_account_name,  mutable_variant_object()
+                                               ("account", "eosio.msig")
+                                               ("is_priv", 1)
+         );
+      }       
    }
 
    transaction_trace_ptr create_account_with_resources( account_name a, account_name creator, asset ramfunds, bool multisig,
@@ -248,13 +266,49 @@ public:
                           ("project_index", project_index)
                           ("state", state)
       );
-   }    
+   }   
+   
+   action_result setready_eb( const account_name& owner, 
+                              const uint64_t& project_index, 
+                              const uint64_t& detail_index,
+                              const uint64_t& resource_index) {
+      return push_action_eb( name(owner), N(setready), mvo()
+                          ("project_index", project_index)
+                          ("detail_index", detail_index)
+                          ("resource_index", resource_index)
+      );
+   } 
+   
+   action_result cancelready_eb( const account_name& owner, 
+                              const uint64_t& project_index) {
+      return push_action_eb( name(owner), N(cancelready), mvo()
+                          ("project_index", project_index)
+      );
+   }   
    
    fc::variant get_created_project(const uint64_t& index)
    {
       vector<char> data = get_row_by_account( N(eb.factory), N(created), N(projects), index );  
       return data.empty() ? fc::variant() : factory_abi_ser.binary_to_variant( "project", data, abi_serializer_max_time );
    }  
+   
+   fc::variant get_selected_project(const uint64_t& index)
+   {
+      vector<char> data = get_row_by_account( N(eb.factory), N(selected), N(projects), index );  
+      return data.empty() ? fc::variant() : factory_abi_ser.binary_to_variant( "project", data, abi_serializer_max_time );
+   }  
+   
+   fc::variant get_readied_project(const uint64_t& index)
+   {
+      vector<char> data = get_row_by_account( N(eb.factory), N(readied), N(projects), index );  
+      return data.empty() ? fc::variant() : factory_abi_ser.binary_to_variant( "project", data, abi_serializer_max_time );
+   }   
+   
+   fc::variant get_started_project(const uint64_t& index)
+   {
+      vector<char> data = get_row_by_account( N(eb.factory), N(started), N(projects), index );  
+      return data.empty() ? fc::variant() : factory_abi_ser.binary_to_variant( "project", data, abi_serializer_max_time );
+   }    
    
    fc::variant get_projectinfo(const uint64_t& scope, const uint64_t& index)
    {
@@ -275,6 +329,7 @@ public:
    }    
    
    abi_serializer factory_abi_ser;
+   abi_serializer msig_abi_ser;
 };
 
 transaction eb_factory_tester::reqauth( account_name from, const vector<permission_level>& auths, const fc::microseconds& max_serialization_time ) {
@@ -307,47 +362,69 @@ transaction eb_factory_tester::reqauth( account_name from, const vector<permissi
 
 BOOST_AUTO_TEST_SUITE(eb_factory_tests)
 
-BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
-   // cross_15_percent_threshold();
+string proj_1_owner = "alice";
+string proj_1_name = "test_project_1";
+string proj_1_url = "www.test_1.io";
+string proj_1_hash = "test_hash_1";
+string proj_1_homepage = "www.homepage_1.com";
+string proj_1_icon = "www.icon_1.io";
+string proj_1_helper = "alice";
 
-   produce_blocks( 10 );
-   produce_block( fc::hours(3*24) );
+string proj_1_2_url = "www.test_1_2.io";
+string proj_1_2_hash = "test_hash_1_2";
+string proj_1_2_homepage = "www.homepage_1_2.com";
+string proj_1_2_icon = "www.icon_1_2.io";
 
-   BOOST_REQUIRE_EQUAL( core_sym::from_string("0.0000"), get_balance( "alice" ) );
-   //transfer( "eosio", "alice", "1000.0000 BLACK", "eosio" );
-   
-   string proj_1_owner = "alice";
-   string proj_1_name = "test_1_project";
-   string proj_1_url = "www.test_1.io";
-   string proj_1_hash = "test_1_hash";
-   string proj_1_homepage = "www.homepage_1.com";
-   string proj_1_icon = "www.icon_1.io";
-   string proj_1_helper = "alice";
-   
-   string proj_1_url_update = "www.test_1_2.io";
-   string proj_1_hash_update = "test_1_2_hash";
-   string proj_1_homepage_update = "www.homepage_1_2.com";
-   string proj_1_icon_update = "www.icon_1_2.io";
-   
-   string proj_2_owner = "bob";
-   string proj_2_name = "test_2_project";
-   string proj_2_url = "www.test_2.io";
-   string proj_2_hash = "test_2_hash";
-   string proj_2_homepage = "www.homepage_2.com";
-   string proj_2_icon = "www.icon_2.io";
-   string proj_2_helper = "bob";   
-   
-   string proj_3_owner = "carol";
-   string proj_3_name = "test_3_project";
-   string proj_3_url = "www.test_3.io";
-   string proj_3_hash = "test_3_hash";
-   string proj_3_homepage = "www.homepage_3.com";
-   string proj_3_icon = "www.icon_3.io";
-   string proj_3_helper = "carol";      
-   
-   ///////////////////////////////////                   
-   // create & add & remove & check //
-   ///////////////////////////////////                   
+string proj_2_owner = "bob";
+string proj_2_name = "test_project_2";
+string proj_2_url = "www.test_2.io";
+string proj_2_hash = "test_hash_2";
+string proj_2_homepage = "www.homepage_2.com";
+string proj_2_icon = "www.icon_2.io";
+string proj_2_helper = "bob";   
+
+string proj_3_owner = "carol";
+string proj_3_name = "test_project_3";
+string proj_3_url = "www.test_3.io";
+string proj_3_hash = "test_hash_3";
+string proj_3_homepage = "www.homepage_3.com";
+string proj_3_icon = "www.icon_3.io";
+string proj_3_helper = "carol";   
+
+uint64_t project_1_index = 0;                                      
+uint64_t project_2_index = 1;
+uint64_t project_3_index = 2;
+uint64_t project_4_index = 3;
+
+uint64_t project_1_info_1_index = 0;
+uint64_t project_1_info_1_2_index = 1;
+uint64_t project_2_info_1_index = 0;
+uint64_t project_3_info_1_index = 0;
+
+uint64_t resource_1_index = 0;
+uint64_t resource_1_2_index = 1;   
+uint64_t resource_1_3_index = 2;   
+
+uint64_t payment_1_index = 0;
+uint64_t payment_1_2_index = 1;      
+uint64_t payment_1_3_index = 2;
+
+uint64_t ram_max_size_1 = 30;
+asset black_max_count_1 = core_sym::from_string("200.0000");
+uint64_t ram_max_size_2 = 20;
+asset black_max_count_2 = core_sym::from_string("300.0000");   
+uint64_t ram_max_size_3 = 100;
+asset black_max_count_3 = core_sym::from_string("10.0000");   
+
+uint64_t aftertime_1 = 10000;
+int8_t percentage_1 = 40;
+uint64_t aftertime_2 = 20000;
+int8_t percentage_2 = 60;   
+uint64_t aftertime_3 = 30000;
+int8_t percentage_3 = 60; 
+
+BOOST_FIXTURE_TEST_CASE( create_add_rm_drop, eb_factory_tester ) try {
+   // create project_1
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
                                                 proj_1_url, 
@@ -355,8 +432,9 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
                                                 proj_1_homepage,
                                                 proj_1_icon,
                                                 proj_1_helper) );
-                                                
    produce_blocks( 10 );
+   
+   // create project_2
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_2_owner,
                                                 proj_2_name, 
                                                 proj_2_url, 
@@ -366,6 +444,8 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
                                                 proj_2_helper) );                                            
 
    produce_blocks( 10 );
+   
+   // create project_3
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_3_owner,
                                                 proj_3_name, 
                                                 proj_3_url, 
@@ -375,7 +455,9 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
                                                 proj_3_helper) ); 
 
    produce_blocks( 10 );
-   BOOST_REQUIRE_EQUAL( wasm_assert_msg("already same project name exist"), 
+   
+   // create existed project_1
+   BOOST_REQUIRE_EQUAL( wasm_assert_msg("already project name exist"), 
                         create_eb( proj_3_owner,
                                     proj_1_name, 
                                     proj_1_url, 
@@ -383,51 +465,19 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
                                     proj_1_homepage,
                                     proj_1_icon,
                                     proj_1_helper) );                                                 
-
-   uint64_t project_1_index = 0;                                      
-   uint64_t project_2_index = 1;
-   uint64_t project_3_index = 2;
-   uint64_t project_4_index = 3;
-   
-   uint64_t projectinfo_1_index = 0;
-   uint64_t projectinfo_1_2_index = 1;
-   uint64_t projectinfo_2_index = 0;
-   uint64_t projectinfo_3_index = 0;
-   
-   uint64_t resource_1_index = 0;
-   uint64_t resource_1_2_index = 1;   
-   uint64_t resource_1_3_index = 2;   
-   
-   uint64_t payment_1_index = 0;
-   uint64_t payment_1_2_index = 1;      
-   uint64_t payment_1_3_index = 2;
-   
-   uint64_t ram_max_size_1 = 30;
-   asset black_max_count_1 = core_sym::from_string("200.0000");
-   uint64_t ram_max_size_2 = 20;
-   asset black_max_count_2 = core_sym::from_string("300.0000");   
-   uint64_t ram_max_size_3 = 100;
-   asset black_max_count_3 = core_sym::from_string("10.0000");   
-   
-   uint64_t aftertime_1 = 10000;
-   int8_t percentage_1 = 40;
-   uint64_t aftertime_2 = 20000;
-   int8_t percentage_2 = 60;   
-   uint64_t aftertime_3 = 30000;
-   int8_t percentage_3 = 60;      
-   
-   // add info
    produce_blocks( 10 );
+   
+   // add project_1 info
    BOOST_REQUIRE_EQUAL( success(), addinfo_eb( proj_1_owner,
                                                 project_1_index, 
-                                                proj_1_url_update, 
-                                                proj_1_hash_update,
-                                                proj_1_homepage_update,
-                                                proj_1_icon_update,
+                                                proj_1_2_url, 
+                                                proj_1_2_hash,
+                                                proj_1_2_homepage,
+                                                proj_1_2_icon,
                                                 proj_1_helper) );    
-    
-   // add resource
    produce_blocks( 10 );
+   
+   // add project_1 resource
    BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
                                                 project_1_index, 
                                                 ram_max_size_1, 
@@ -440,9 +490,9 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
                                                 project_1_index, 
                                                 ram_max_size_3, 
                                                 black_max_count_3) );                                                      
-                                                
-   // add payment    
    produce_blocks( 10 );
+   
+   // add project_1 payment    
    BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
                                                 project_1_index, 
                                                 aftertime_1, 
@@ -456,12 +506,13 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
                                                 aftertime_3, 
                                                 percentage_3) );                                                 
 
+   // check project_1
    auto proj_1 = get_created_project(project_1_index);
    BOOST_REQUIRE_EQUAL(false, proj_1.is_null());
    BOOST_REQUIRE_EQUAL(proj_1["owner"].as_string(), proj_1_owner);
-   BOOST_REQUIRE_EQUAL(proj_1["proj_name"].as_string(), "test_1_project");
+   BOOST_REQUIRE_EQUAL(proj_1["proj_name"].as_string(), proj_1_name);
    
-   auto projinfo_1 = get_projectinfo(project_1_index, projectinfo_1_index);
+   auto projinfo_1 = get_projectinfo(project_1_index, project_1_info_1_index);
    BOOST_REQUIRE_EQUAL(false, projinfo_1.is_null());
    BOOST_REQUIRE_EQUAL(projinfo_1["url"].as_string(), proj_1_url);
    BOOST_REQUIRE_EQUAL(projinfo_1["hash"].as_string(), proj_1_hash);
@@ -469,12 +520,12 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
    BOOST_REQUIRE_EQUAL(projinfo_1["icon"].as_string(), proj_1_icon);
    BOOST_REQUIRE_EQUAL(projinfo_1["helper"].as_string(), proj_1_helper);
    
-   auto projinfo_1_2 = get_projectinfo(project_1_index, projectinfo_1_2_index);
+   auto projinfo_1_2 = get_projectinfo(project_1_index, project_1_info_1_2_index);
    BOOST_REQUIRE_EQUAL(false, projinfo_1_2.is_null());
-   BOOST_REQUIRE_EQUAL(projinfo_1_2["url"].as_string(), proj_1_url_update);
-   BOOST_REQUIRE_EQUAL(projinfo_1_2["hash"].as_string(), proj_1_hash_update);
-   BOOST_REQUIRE_EQUAL(projinfo_1_2["homepage"].as_string(), proj_1_homepage_update);
-   BOOST_REQUIRE_EQUAL(projinfo_1_2["icon"].as_string(), proj_1_icon_update);
+   BOOST_REQUIRE_EQUAL(projinfo_1_2["url"].as_string(), proj_1_2_url);
+   BOOST_REQUIRE_EQUAL(projinfo_1_2["hash"].as_string(), proj_1_2_hash);
+   BOOST_REQUIRE_EQUAL(projinfo_1_2["homepage"].as_string(), proj_1_2_homepage);
+   BOOST_REQUIRE_EQUAL(projinfo_1_2["icon"].as_string(), proj_1_2_icon);
    BOOST_REQUIRE_EQUAL(projinfo_1_2["helper"].as_string(), proj_1_helper);  
    
    auto resource_1 = get_resource(project_1_index, resource_1_index);
@@ -519,13 +570,13 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
    auto payment_1_2_removed = get_payment(project_1_index, payment_1_2_index);
    BOOST_REQUIRE_EQUAL(true, payment_1_2_removed.is_null());    
    
-
+   // check project_2
    auto proj_2 = get_created_project(project_2_index);
    BOOST_REQUIRE_EQUAL(false, proj_2.is_null());
    BOOST_REQUIRE_EQUAL(proj_2["owner"].as_string(), proj_2_owner);
    BOOST_REQUIRE_EQUAL(proj_2["proj_name"].as_string(), proj_2_name);   
    
-   auto projinfo_2 = get_projectinfo(project_2_index, projectinfo_2_index);
+   auto projinfo_2 = get_projectinfo(project_2_index, project_2_info_1_index);
    BOOST_REQUIRE_EQUAL(false, projinfo_2.is_null());
    BOOST_REQUIRE_EQUAL(projinfo_2["url"].as_string(), proj_2_url);
    BOOST_REQUIRE_EQUAL(projinfo_2["hash"].as_string(), proj_2_hash);
@@ -533,12 +584,13 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
    BOOST_REQUIRE_EQUAL(projinfo_2["icon"].as_string(), proj_2_icon);
    BOOST_REQUIRE_EQUAL(projinfo_2["helper"].as_string(), proj_2_helper);   
    
+   // check project_2
    auto proj_3 = get_created_project(project_3_index);
    BOOST_REQUIRE_EQUAL(false, proj_3.is_null());
    BOOST_REQUIRE_EQUAL(proj_3["owner"].as_string(), proj_3_owner);
    BOOST_REQUIRE_EQUAL(proj_3["proj_name"].as_string(), proj_3_name);   
    
-   auto projinfo_3 = get_projectinfo(project_3_index, projectinfo_3_index);
+   auto projinfo_3 = get_projectinfo(project_3_index, project_3_info_1_index);
    BOOST_REQUIRE_EQUAL(false, projinfo_3.is_null());
    BOOST_REQUIRE_EQUAL(projinfo_3["url"].as_string(), proj_3_url);
    BOOST_REQUIRE_EQUAL(projinfo_3["hash"].as_string(), proj_3_hash);
@@ -546,26 +598,22 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
    BOOST_REQUIRE_EQUAL(projinfo_3["icon"].as_string(), proj_3_icon);
    BOOST_REQUIRE_EQUAL(projinfo_3["helper"].as_string(), proj_3_helper);   
    
-   ////////////////////
-   // drop is failed //
-   ////////////////////
+   // try project dropping
    BOOST_REQUIRE_EQUAL("missing authority of alice", 
                         drop_eb(name(proj_2_owner), project_1_index, "created"));   
    BOOST_REQUIRE_EQUAL(wasm_assert_msg("project doesn't exist"), 
                         drop_eb(name(proj_1_owner), project_4_index, "created"));   
                     
-   //////////////////                   
-   // drop & check //
-   //////////////////
+   // drop & check project 
    BOOST_REQUIRE_EQUAL(success(), 
                         drop_eb(name(proj_1_owner), project_1_index, "created"));   
    
    auto proj_1_dropped = get_created_project(project_1_index);
    BOOST_REQUIRE_EQUAL(true, proj_1_dropped.is_null());   
    
-   auto projinfo_1_dropped = get_projectinfo(project_1_index, projectinfo_1_index);
+   auto projinfo_1_dropped = get_projectinfo(project_1_index, project_1_info_1_index);
    BOOST_REQUIRE_EQUAL(true, projinfo_1_dropped.is_null());
-   auto projinfo_1_2_dropped = get_projectinfo(project_1_index, projectinfo_1_2_index);
+   auto projinfo_1_2_dropped = get_projectinfo(project_1_index, project_1_info_1_2_index);
    BOOST_REQUIRE_EQUAL(true, projinfo_1_2_dropped.is_null());   
    
    auto resource_1_dropped = get_resource(project_1_index, resource_1_index);
@@ -578,9 +626,7 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
    auto payment_1_3_dropped = get_payment(project_1_index, payment_1_3_index);
    BOOST_REQUIRE_EQUAL(true, payment_1_3_dropped.is_null());     
    
-   ////////////////////                   
-   // create & check //
-   ////////////////////     
+   // create dropped project_1   
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
                                                 proj_1_url, 
@@ -592,7 +638,7 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
    auto proj_1_recreated = get_created_project(project_4_index);
    BOOST_REQUIRE_EQUAL(false, proj_1_recreated.is_null());
    BOOST_REQUIRE_EQUAL(proj_1_recreated["owner"].as_string(), proj_1_owner);
-   BOOST_REQUIRE_EQUAL(proj_1_recreated["proj_name"].as_string(), "test_1_project");                                                
+   BOOST_REQUIRE_EQUAL(proj_1_recreated["proj_name"].as_string(), "test_project_1");                                                
    
    /*
    std::cout << "proj_1_name_hash: " << proj_1["proj_name_hash"].as_string() << std::endl;
@@ -605,6 +651,1244 @@ BOOST_FIXTURE_TEST_CASE( create_drop, eb_factory_tester ) try {
    */
 } FC_LOG_AND_RETHROW()
 
+BOOST_FIXTURE_TEST_CASE( select_drop, eb_factory_tester ) try {
+   ////////////////////
+   // create project //
+   ////////////////////
+   
+   // create project_1
+   BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
+                                                proj_1_name, 
+                                                proj_1_url, 
+                                                proj_1_hash,
+                                                proj_1_homepage,
+                                                proj_1_icon,
+                                                "") );
+   produce_blocks( 10 );
+   
+   // create project_2
+   BOOST_REQUIRE_EQUAL( success(), create_eb( proj_2_owner,
+                                                proj_2_name, 
+                                                proj_2_url, 
+                                                proj_2_hash,
+                                                proj_2_homepage,
+                                                proj_2_icon,
+                                                proj_1_helper) );                                            
+   produce_blocks( 10 );
+   
+   // add project_1 info
+   BOOST_REQUIRE_EQUAL( success(), addinfo_eb( proj_1_owner,
+                                                project_1_index, 
+                                                proj_1_2_url, 
+                                                proj_1_2_hash,
+                                                proj_1_2_homepage,
+                                                proj_1_2_icon,
+                                                proj_1_helper) );    
+   produce_blocks( 10 );
+   
+   // add project_1 resource
+   BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
+                                                project_1_index, 
+                                                ram_max_size_1, 
+                                                black_max_count_1) );  
+   BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
+                                                project_1_index, 
+                                                ram_max_size_2, 
+                                                black_max_count_2) );     
+   BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
+                                                project_1_index, 
+                                                ram_max_size_3, 
+                                                black_max_count_3) );
+   produce_blocks( 10 );
+   
+   // add project_1 payment
+   BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
+                                                project_1_index, 
+                                                aftertime_1, 
+                                                percentage_1) );  
+   BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
+                                                project_1_index, 
+                                                aftertime_2, 
+                                                percentage_2) );   
+   BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
+                                                project_1_index, 
+                                                aftertime_3, 
+                                                percentage_3) );                                                 
+
+   ////////////////////
+   // select project //
+   ////////////////////
+   
+   // pre-work   
+   set_authority(N(eb.factory), "active", authority(1,
+      vector<key_weight>{{get_private_key("eb.factory", "active").get_public_key(), 1}},
+      vector<permission_level_weight>{{{N(eosio.prods), config::active_name}, 1}}), "owner",
+      { { N(eb.factory), "active" } }, { get_private_key( N(eb.factory), "active" ) });
+
+   create_accounts( { N(soula) } );
+   create_accounts( { N(soulb) } );
+   create_accounts( { N(soulc) } );
+   create_accounts( { N(sould) } );
+   create_accounts( { N(soule) } );
+   create_accounts( { N(soulf) } );
+   set_producers( {N(soula),N(soulb),N(soulc), 
+                     N(sould),N(soule),N(soulf)} );
+   produce_blocks(50);
+   
+   vector<permission_level> perm = { { N(soula), config::active_name }, { N(soulb), config::active_name },
+                                       {N(soulc), config::active_name}, {N(sould), config::active_name},
+                                       {N(soule), config::active_name}, {N(soulf), config::active_name}
+   };
+
+   // select project_1
+   // helper is updated
+   vector<permission_level> action_perm = {{N(eb.factory), config::active_name}};   
+   variant pretty_trx = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "select")
+               ("authorization", action_perm)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_1_index)
+                ("detail_index", project_1_info_1_2_index)
+                ("resource_index", resource_1_3_index)
+                ("helper", proj_1_helper)
+               )
+               })
+      );
+
+   transaction trx;
+   abi_serializer::from_variant(pretty_trx, trx, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("trx",           trx)
+                  ("requested", perm)
+   );   
+   
+   // approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   ); 
+   
+   // execute, but not enough approvers
+   BOOST_REQUIRE_EXCEPTION(
+      push_action( N(soula), N(exec), mvo()
+                     ("proposer",      "soula")
+                     ("proposal_name", "first")
+                     ("executer",      "soula")
+      ),
+      eosio_assert_message_exception, eosio_assert_message_is("transaction authorization failed")
+   );   
+   
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace = t; } } );
+
+   // approve
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("executer",      "soula")
+   );   
+   
+   BOOST_REQUIRE( bool(trace) );
+   BOOST_REQUIRE_EQUAL( 1, trace->action_traces.size() );
+   BOOST_REQUIRE_EQUAL( transaction_receipt::executed, trace->receipt->status );   
+   
+   // checking
+   auto proj_1_remvoed = get_created_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(true, proj_1_remvoed.is_null());
+
+   auto proj_1_selected = get_selected_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(false, proj_1_selected.is_null());   
+   BOOST_REQUIRE_EQUAL(proj_1_selected["owner"].as_string(), proj_1_owner);
+   BOOST_REQUIRE_EQUAL(proj_1_selected["proj_name"].as_string(), proj_1_name);   
+   BOOST_REQUIRE_EQUAL(proj_1_selected["selected_detail_index"].as_uint64(), project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(proj_1_selected["selected_resource_index"].as_uint64(), resource_1_3_index); 
+   
+   auto projinfo_1_selected = get_projectinfo(project_1_index, project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(false, projinfo_1_selected.is_null());
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["url"].as_string(), proj_1_2_url);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["hash"].as_string(), proj_1_2_hash);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["homepage"].as_string(), proj_1_2_homepage);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["icon"].as_string(), proj_1_2_icon);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["helper"].as_string(), proj_1_owner);     
+   
+   // select project_2
+   // it is to be failed, because helper is different
+   vector<permission_level> action_perm2 = {{N(eb.factory), config::active_name}};   
+   variant pretty_trx2 = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "select")
+               ("authorization", action_perm2)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_2_index)
+                ("detail_index", 0)
+                ("resource_index", 0)
+                ("helper", name(proj_2_owner))
+               )
+               })
+      );
+
+   transaction trx2;
+   abi_serializer::from_variant(pretty_trx2, trx2, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("trx",           trx2)
+                  ("requested", perm)
+   );   
+   
+   //approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   );  
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace2;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace2 = t; } } );
+
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("executer",      "soula")
+   );   
+   
+   //BOOST_REQUIRE( bool(trace2) );
+   BOOST_REQUIRE_EQUAL( false, bool(trace2) );
+   
+   // select project_2 again
+   vector<permission_level> action_perm3 = {{N(eb.factory), config::active_name}};   
+   variant pretty_trx3 = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "select")
+               ("authorization", action_perm3)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_2_index)
+                ("detail_index", 0)
+                ("resource_index", 0)
+                ("helper", name(proj_1_owner))
+               )
+               })
+      );
+
+   transaction trx3;
+   abi_serializer::from_variant(pretty_trx3, trx3, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "third")
+                  ("trx",           trx3)
+                  ("requested", perm)
+   );   
+   
+   //approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "third")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "third")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "third")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "third")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   );  
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "third")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace3;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace3 = t; } } );
+
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "third")
+                  ("executer",      "soula")
+   );   
+   
+   BOOST_REQUIRE( bool(trace3) );   
+   BOOST_REQUIRE_EQUAL( 1, trace3->action_traces.size() );
+   BOOST_REQUIRE_EQUAL( transaction_receipt::executed, trace3->receipt->status );   
+   
+   auto proj_2_remvoed = get_created_project(project_2_index);
+   BOOST_REQUIRE_EQUAL(true, proj_2_remvoed.is_null());
+
+   auto proj_2_selected = get_selected_project(project_2_index);
+   BOOST_REQUIRE_EQUAL(false, proj_2_selected.is_null());   
+   BOOST_REQUIRE_EQUAL(proj_2_selected["owner"].as_string(), proj_2_owner);
+   BOOST_REQUIRE_EQUAL(proj_2_selected["proj_name"].as_string(), proj_2_name);   
+   BOOST_REQUIRE_EQUAL(proj_2_selected["selected_detail_index"].as_uint64(), 0);
+   BOOST_REQUIRE_EQUAL(proj_2_selected["selected_resource_index"].as_uint64(), 0); 
+      
+   auto projinfo_2_selected = get_projectinfo(project_2_index, project_2_info_1_index);
+   BOOST_REQUIRE_EQUAL(false, projinfo_2_selected.is_null());
+   BOOST_REQUIRE_EQUAL(projinfo_2_selected["url"].as_string(), proj_2_url);
+   BOOST_REQUIRE_EQUAL(projinfo_2_selected["hash"].as_string(), proj_2_hash);
+   BOOST_REQUIRE_EQUAL(projinfo_2_selected["homepage"].as_string(), proj_2_homepage);
+   BOOST_REQUIRE_EQUAL(projinfo_2_selected["icon"].as_string(), proj_2_icon);
+   BOOST_REQUIRE_EQUAL(projinfo_2_selected["helper"].as_string(), proj_1_owner);  
+   
+   //////////////////
+   // drop project //
+   //////////////////
+   
+   // drop project_1
+   vector<permission_level> action_perm4 = {{N(eb.factory), config::active_name}};  
+   variant pretty_trx4 = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "drop")
+               ("authorization", action_perm4)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_1_index)
+               )
+               })
+      );
+
+   transaction trx4;
+   abi_serializer::from_variant(pretty_trx4, trx4, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("trx",           trx4)
+                  ("requested", perm)
+   );   
+   
+   //approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   );  
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace4;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace4 = t; } } );
+
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("executer",      "soula")
+   );   
+   
+   BOOST_REQUIRE( bool(trace4) );   
+   BOOST_REQUIRE_EQUAL( 1, trace4->action_traces.size() );
+   BOOST_REQUIRE_EQUAL( transaction_receipt::executed, trace4->receipt->status );   
+   
+   auto proj_1_dropped = get_selected_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(true, proj_1_dropped.is_null());   
+   
+   auto projinfo_1_dropped = get_projectinfo(project_1_index, project_1_info_1_index);
+   BOOST_REQUIRE_EQUAL(true, projinfo_1_dropped.is_null());
+   auto projinfo_1_2_dropped = get_projectinfo(project_1_index, project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(true, projinfo_1_2_dropped.is_null());   
+   
+   auto resource_1_dropped = get_resource(project_1_index, resource_1_index);
+   BOOST_REQUIRE_EQUAL(true, resource_1_dropped.is_null());
+   auto resource_1_2_dropped = get_resource(project_1_index, resource_1_2_index);
+   BOOST_REQUIRE_EQUAL(true, resource_1_2_dropped.is_null());        
+   auto resource_1_3_dropped = get_resource(project_1_index, resource_1_3_index);
+   BOOST_REQUIRE_EQUAL(true, resource_1_3_dropped.is_null());     
+
+   auto payment_1_dropped = get_payment(project_1_index, payment_1_index);
+   BOOST_REQUIRE_EQUAL(true, payment_1_dropped.is_null());
+   auto payment_1_2_dropped = get_payment(project_1_index, payment_1_2_index);
+   BOOST_REQUIRE_EQUAL(true, payment_1_2_dropped.is_null());     
+   auto payment_1_3_dropped = get_payment(project_1_index, payment_1_3_index);
+   BOOST_REQUIRE_EQUAL(true, payment_1_3_dropped.is_null());     
+} FC_LOG_AND_RETHROW()
+
+BOOST_FIXTURE_TEST_CASE( ready_add_rm_cancel_drop, eb_factory_tester ) try {
+   ////////////////////
+   // create project //
+   ////////////////////
+   
+   // create project_1
+   BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
+                                                proj_1_name, 
+                                                proj_1_url, 
+                                                proj_1_hash,
+                                                proj_1_homepage,
+                                                proj_1_icon,
+                                                "") );
+                                                
+   produce_blocks( 10 );
+   
+   // create project_2
+   BOOST_REQUIRE_EQUAL( success(), create_eb( proj_2_owner,
+                                                proj_2_name, 
+                                                proj_2_url, 
+                                                proj_2_hash,
+                                                proj_2_homepage,
+                                                proj_2_icon,
+                                                proj_1_helper) );                                            
+   produce_blocks( 10 );
+   
+   // add project_1 info
+   BOOST_REQUIRE_EQUAL( success(), addinfo_eb( proj_1_owner,
+                                                project_1_index, 
+                                                proj_1_2_url, 
+                                                proj_1_2_hash,
+                                                proj_1_2_homepage,
+                                                proj_1_2_icon,
+                                                proj_1_helper) );    
+   produce_blocks( 10 );
+   
+   // add project_1 resource
+   BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
+                                                project_1_index, 
+                                                ram_max_size_1, 
+                                                black_max_count_1) );  
+   BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
+                                                project_1_index, 
+                                                ram_max_size_2, 
+                                                black_max_count_2) );     
+   BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
+                                                project_1_index, 
+                                                ram_max_size_3, 
+                                                black_max_count_3) );
+   produce_blocks( 10 );
+   
+   // add project_1 payment
+   BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
+                                                project_1_index, 
+                                                aftertime_1, 
+                                                percentage_1) );  
+   BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
+                                                project_1_index, 
+                                                aftertime_2, 
+                                                percentage_2) );   
+   BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
+                                                project_1_index, 
+                                                aftertime_3, 
+                                                percentage_3) );     
+   ////////////////////
+   // select project //
+   ////////////////////
+   
+   set_authority(N(eb.factory), "active", authority(1,
+      vector<key_weight>{{get_private_key("eb.factory", "active").get_public_key(), 1}},
+      vector<permission_level_weight>{{{N(eosio.prods), config::active_name}, 1}}), "owner",
+      { { N(eb.factory), "active" } }, { get_private_key( N(eb.factory), "active" ) });
+
+   create_accounts( { N(soula) } );
+   create_accounts( { N(soulb) } );
+   create_accounts( { N(soulc) } );
+   create_accounts( { N(sould) } );
+   create_accounts( { N(soule) } );
+   create_accounts( { N(soulf) } );
+   set_producers( {N(soula),N(soulb),N(soulc), 
+                     N(sould),N(soule),N(soulf)} );
+   produce_blocks(50);
+   
+   vector<permission_level> perm = { { N(soula), config::active_name }, { N(soulb), config::active_name },
+                                       {N(soulc), config::active_name}, {N(sould), config::active_name},
+                                       {N(soule), config::active_name}, {N(soulf), config::active_name}
+   };
+
+   // select project_1
+   vector<permission_level> action_perm = {{N(eb.factory), config::active_name}};   
+   variant pretty_trx = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "select")
+               ("authorization", action_perm)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_1_index)
+                ("detail_index", project_1_info_1_index)
+                ("resource_index", resource_1_2_index)
+                ("helper", proj_1_helper)
+               )
+               })
+      );
+
+   transaction trx;
+   abi_serializer::from_variant(pretty_trx, trx, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("trx",           trx)
+                  ("requested", perm)
+   );   
+   
+   // approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   ); 
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace = t; } } );
+
+   // approve
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("executer",      "soula")
+   );   
+   
+   BOOST_REQUIRE( bool(trace) );
+   BOOST_REQUIRE_EQUAL( 1, trace->action_traces.size() );
+   BOOST_REQUIRE_EQUAL( transaction_receipt::executed, trace->receipt->status );   
+   
+   auto proj_1_remvoed = get_created_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(true, proj_1_remvoed.is_null());
+
+   auto proj_1_selected = get_selected_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(false, proj_1_selected.is_null());   
+   BOOST_REQUIRE_EQUAL(proj_1_selected["owner"].as_string(), proj_1_owner);
+   BOOST_REQUIRE_EQUAL(proj_1_selected["proj_name"].as_string(), proj_1_name);   
+   BOOST_REQUIRE_EQUAL(proj_1_selected["selected_detail_index"].as_uint64(), project_1_info_1_index);
+   BOOST_REQUIRE_EQUAL(proj_1_selected["selected_resource_index"].as_uint64(), resource_1_2_index); 
+   
+   auto projinfo_1_selected = get_projectinfo(project_1_index, project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(false, projinfo_1_selected.is_null());
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["url"].as_string(), proj_1_2_url);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["hash"].as_string(), proj_1_2_hash);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["homepage"].as_string(), proj_1_2_homepage);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["icon"].as_string(), proj_1_2_icon);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["helper"].as_string(), proj_1_owner);     
+   
+   ///////////////////
+   // ready project //
+   ///////////////////
+   
+   BOOST_REQUIRE_EQUAL( success(), setready_eb( proj_1_owner,
+                                                   project_1_index, 
+                                                   project_1_info_1_2_index, 
+                                                   resource_1_3_index) );
+                                                   
+   auto proj_1_selected_removed = get_selected_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(true, proj_1_selected_removed.is_null());   
+   
+   auto proj_1_readied = get_readied_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(false, proj_1_readied.is_null());   
+   BOOST_REQUIRE_EQUAL(proj_1_readied["owner"].as_string(), proj_1_owner);
+   BOOST_REQUIRE_EQUAL(proj_1_readied["proj_name"].as_string(), proj_1_name);   
+   BOOST_REQUIRE_EQUAL(proj_1_readied["selected_detail_index"].as_uint64(), project_1_info_1_index);
+   BOOST_REQUIRE_EQUAL(proj_1_readied["selected_resource_index"].as_uint64(), resource_1_2_index);    
+   BOOST_REQUIRE_EQUAL(proj_1_readied["started_detail_index"].as_uint64(), project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(proj_1_readied["started_resource_index"].as_uint64(), resource_1_3_index);    
+   
+   ///////////////////////////////
+   // add & remove project data //
+   ///////////////////////////////
+   
+   // TODO BY SOULHAMMER
+   // verify failure
+   
+   ///////////////////////////
+   // cancel readed project //
+   ///////////////////////////
+
+   vector<permission_level> action_perm_3 = {{N(eb.factory), config::active_name}};   
+   variant pretty_trx_3 = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "cancelready")
+               ("authorization", action_perm_3)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_1_index)
+               )
+               })
+      );
+
+   transaction trx_3;
+   abi_serializer::from_variant(pretty_trx_3, trx_3, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("trx",           trx_3)
+                  ("requested", perm)
+   );   
+   
+   // approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   ); 
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace_3;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace_3 = t; } } );
+
+   // approve
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("executer",      "soula")
+   );   
+   
+   BOOST_REQUIRE( bool(trace_3) );
+   BOOST_REQUIRE_EQUAL( 1, trace_3->action_traces.size() );
+   BOOST_REQUIRE_EQUAL( transaction_receipt::executed, trace_3->receipt->status );                                                     
+                                                   
+   auto proj_1_readied_canceled = get_readied_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(true, proj_1_readied_canceled.is_null());     
+   
+   auto proj_1_selected_canceled = get_selected_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(false, proj_1_selected_canceled.is_null());   
+   BOOST_REQUIRE_EQUAL(proj_1_selected_canceled["owner"].as_string(), proj_1_owner);
+   BOOST_REQUIRE_EQUAL(proj_1_selected_canceled["proj_name"].as_string(), proj_1_name);   
+   BOOST_REQUIRE_EQUAL(proj_1_selected_canceled["selected_detail_index"].as_uint64(), project_1_info_1_index);
+   BOOST_REQUIRE_EQUAL(proj_1_selected_canceled["selected_resource_index"].as_uint64(), resource_1_2_index); 
+   BOOST_REQUIRE_EQUAL(proj_1_selected_canceled["started_detail_index"].as_uint64(), project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(proj_1_selected_canceled["started_resource_index"].as_uint64(), resource_1_3_index);  
+   
+   //////////////////
+   // drop project //
+   //////////////////
+   
+   vector<permission_level> action_perm_4 = {{N(eb.factory), config::active_name}};   
+   variant pretty_trx_4 = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "drop")
+               ("authorization", action_perm_4)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_1_index)
+               )
+               })
+      );
+
+   transaction trx_4;
+   abi_serializer::from_variant(pretty_trx_4, trx_4, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("trx",           trx_4)
+                  ("requested", perm)
+   );   
+   
+   // approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   ); 
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace_4;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace_4 = t; } } );
+
+   // approve
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "drop")
+                  ("executer",      "soula")
+   );   
+   
+   BOOST_REQUIRE( bool(trace_4) );
+   BOOST_REQUIRE_EQUAL( 1, trace_4->action_traces.size() );
+   BOOST_REQUIRE_EQUAL( transaction_receipt::executed, trace_4->receipt->status );    
+   
+   auto proj_1_dropped = get_selected_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(true, proj_1_dropped.is_null());   
+   
+   auto projinfo_1_dropped = get_projectinfo(project_1_index, project_1_info_1_index);
+   BOOST_REQUIRE_EQUAL(true, projinfo_1_dropped.is_null());
+   auto projinfo_1_2_dropped = get_projectinfo(project_1_index, project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(true, projinfo_1_2_dropped.is_null());   
+   
+   auto resource_1_dropped = get_resource(project_1_index, resource_1_index);
+   BOOST_REQUIRE_EQUAL(true, resource_1_dropped.is_null());
+   auto resource_1_2_dropped = get_resource(project_1_index, resource_1_2_index);
+   BOOST_REQUIRE_EQUAL(true, resource_1_2_dropped.is_null());        
+   auto resource_1_3_dropped = get_resource(project_1_index, resource_1_3_index);
+   BOOST_REQUIRE_EQUAL(true, resource_1_3_dropped.is_null());     
+
+   auto payment_1_dropped = get_payment(project_1_index, payment_1_index);
+   BOOST_REQUIRE_EQUAL(true, payment_1_dropped.is_null());
+   auto payment_1_2_dropped = get_payment(project_1_index, payment_1_2_index);
+   BOOST_REQUIRE_EQUAL(true, payment_1_2_dropped.is_null());     
+   auto payment_1_3_dropped = get_payment(project_1_index, payment_1_3_index);
+   BOOST_REQUIRE_EQUAL(true, payment_1_3_dropped.is_null());    
+} FC_LOG_AND_RETHROW()
+
+BOOST_FIXTURE_TEST_CASE( start_add_rm_drop, eb_factory_tester ) try {
+   ////////////////////
+   // create project //
+   ////////////////////
+   
+   // create project_1
+   BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
+                                                proj_1_name, 
+                                                proj_1_url, 
+                                                proj_1_hash,
+                                                proj_1_homepage,
+                                                proj_1_icon,
+                                                "") );
+   produce_blocks( 10 );
+   
+   // create project_2
+   BOOST_REQUIRE_EQUAL( success(), create_eb( proj_2_owner,
+                                                proj_2_name, 
+                                                proj_2_url, 
+                                                proj_2_hash,
+                                                proj_2_homepage,
+                                                proj_2_icon,
+                                                proj_1_helper) );                                            
+   produce_blocks( 10 );
+   
+   // add project_1 info
+   BOOST_REQUIRE_EQUAL( success(), addinfo_eb( proj_1_owner,
+                                                project_1_index, 
+                                                proj_1_2_url, 
+                                                proj_1_2_hash,
+                                                proj_1_2_homepage,
+                                                proj_1_2_icon,
+                                                proj_1_helper) );    
+   produce_blocks( 10 );
+   
+   // add project_1 resource
+   BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
+                                                project_1_index, 
+                                                ram_max_size_1, 
+                                                black_max_count_1) );  
+   BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
+                                                project_1_index, 
+                                                ram_max_size_2, 
+                                                black_max_count_2) );     
+   BOOST_REQUIRE_EQUAL( success(), addresource_eb( proj_1_owner,
+                                                project_1_index, 
+                                                ram_max_size_3, 
+                                                black_max_count_3) );
+   produce_blocks( 10 );
+   
+   // add project_1 payment
+   BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
+                                                project_1_index, 
+                                                aftertime_1, 
+                                                percentage_1) );  
+   BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
+                                                project_1_index, 
+                                                aftertime_2, 
+                                                percentage_2) );   
+   BOOST_REQUIRE_EQUAL( success(), addpayment_eb( proj_1_owner,
+                                                project_1_index, 
+                                                aftertime_3, 
+                                                percentage_3) );     
+
+   ////////////////////
+   // select project //
+   ////////////////////
+   
+   // pre-work
+   set_authority(N(eb.factory), "active", authority(1,
+      vector<key_weight>{{get_private_key("eb.factory", "active").get_public_key(), 1}},
+      vector<permission_level_weight>{{{N(eosio.prods), config::active_name}, 1}}), "owner",
+      { { N(eb.factory), "active" } }, { get_private_key( N(eb.factory), "active" ) });
+
+   create_accounts( { N(soula) } );
+   create_accounts( { N(soulb) } );
+   create_accounts( { N(soulc) } );
+   create_accounts( { N(sould) } );
+   create_accounts( { N(soule) } );
+   create_accounts( { N(soulf) } );
+   set_producers( {N(soula),N(soulb),N(soulc), 
+                     N(sould),N(soule),N(soulf)} );
+   produce_blocks(50);
+   
+   vector<permission_level> perm = { { N(soula), config::active_name }, { N(soulb), config::active_name },
+                                       {N(soulc), config::active_name}, {N(sould), config::active_name},
+                                       {N(soule), config::active_name}, {N(soulf), config::active_name}
+   };
+
+   // select project_1
+   vector<permission_level> action_perm = {{N(eb.factory), config::active_name}};   
+   variant pretty_trx = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "select")
+               ("authorization", action_perm)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_1_index)
+                ("detail_index", project_1_info_1_index)
+                ("resource_index", resource_1_2_index)
+                ("helper", proj_1_helper)
+               )
+               })
+      );
+
+   transaction trx;
+   abi_serializer::from_variant(pretty_trx, trx, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("trx",           trx)
+                  ("requested", perm)
+   );   
+   
+   // approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   ); 
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace = t; } } );
+   
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "first")
+                  ("executer",      "soula")
+   );   
+   
+   BOOST_REQUIRE( bool(trace) );
+   BOOST_REQUIRE_EQUAL( 1, trace->action_traces.size() );
+   BOOST_REQUIRE_EQUAL( transaction_receipt::executed, trace->receipt->status );   
+   
+   // checking
+   auto proj_1_remvoed = get_created_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(true, proj_1_remvoed.is_null());
+
+   auto proj_1_selected = get_selected_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(false, proj_1_selected.is_null());   
+   BOOST_REQUIRE_EQUAL(proj_1_selected["owner"].as_string(), proj_1_owner);
+   BOOST_REQUIRE_EQUAL(proj_1_selected["proj_name"].as_string(), proj_1_name);   
+   BOOST_REQUIRE_EQUAL(proj_1_selected["selected_detail_index"].as_uint64(), project_1_info_1_index);
+   BOOST_REQUIRE_EQUAL(proj_1_selected["selected_resource_index"].as_uint64(), resource_1_2_index); 
+   
+   auto projinfo_1_selected = get_projectinfo(project_1_index, project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(false, projinfo_1_selected.is_null());
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["url"].as_string(), proj_1_2_url);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["hash"].as_string(), proj_1_2_hash);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["homepage"].as_string(), proj_1_2_homepage);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["icon"].as_string(), proj_1_2_icon);
+   BOOST_REQUIRE_EQUAL(projinfo_1_selected["helper"].as_string(), proj_1_owner);     
+   
+   ///////////////////
+   // ready project //
+   ///////////////////
+   
+   BOOST_REQUIRE_EQUAL( success(), setready_eb( proj_1_owner,
+                                                   project_1_index, 
+                                                   project_1_info_1_2_index, 
+                                                   resource_1_3_index) );
+                                                   
+   auto proj_1_selected_removed = get_selected_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(true, proj_1_selected_removed.is_null());   
+   
+   auto proj_1_readied = get_readied_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(false, proj_1_readied.is_null());   
+   BOOST_REQUIRE_EQUAL(proj_1_readied["owner"].as_string(), proj_1_owner);
+   BOOST_REQUIRE_EQUAL(proj_1_readied["proj_name"].as_string(), proj_1_name);   
+   BOOST_REQUIRE_EQUAL(proj_1_readied["selected_detail_index"].as_uint64(), project_1_info_1_index);
+   BOOST_REQUIRE_EQUAL(proj_1_readied["selected_resource_index"].as_uint64(), resource_1_2_index);    
+   BOOST_REQUIRE_EQUAL(proj_1_readied["started_detail_index"].as_uint64(), project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(proj_1_readied["started_resource_index"].as_uint64(), resource_1_3_index);
+   
+   ///////////////////
+   // start project //
+   ///////////////////   
+   
+   // start project_1
+   vector<permission_level> action_perm_2 = {{N(eb.factory), config::active_name}};   
+   variant pretty_trx_2 = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "start")
+               ("authorization", action_perm_2)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_1_index)
+                ("detail_index", project_1_info_1_2_index)
+                ("resource_index", resource_1_3_index)
+                ("helper", proj_1_helper)
+               )
+               })
+      );
+
+   transaction trx_2;
+   abi_serializer::from_variant(pretty_trx_2, trx_2, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("trx",           trx_2)
+                  ("requested", perm)
+   );   
+   
+   // approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   ); 
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace_2;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace_2 = t; } } );
+
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("executer",      "soula")
+   );   
+   
+   BOOST_REQUIRE( bool(trace_2) );
+   BOOST_REQUIRE_EQUAL( 1, trace_2->action_traces.size() );
+   BOOST_REQUIRE_EQUAL( transaction_receipt::executed, trace_2->receipt->status );     
+   
+   // checking
+   proj_1_readied = get_readied_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(true, proj_1_readied.is_null());     
+   
+   auto proj_1_started = get_started_project(project_1_index);
+   BOOST_REQUIRE_EQUAL(false, proj_1_started.is_null());    
+   BOOST_REQUIRE_EQUAL(proj_1_started["owner"].as_string(), proj_1_owner);
+   BOOST_REQUIRE_EQUAL(proj_1_started["proj_name"].as_string(), proj_1_name);   
+   BOOST_REQUIRE_EQUAL(proj_1_started["selected_detail_index"].as_uint64(), project_1_info_1_index);
+   BOOST_REQUIRE_EQUAL(proj_1_started["selected_resource_index"].as_uint64(), resource_1_2_index);    
+   BOOST_REQUIRE_EQUAL(proj_1_started["started_detail_index"].as_uint64(), project_1_info_1_2_index);
+   BOOST_REQUIRE_EQUAL(proj_1_started["started_resource_index"].as_uint64(), resource_1_3_index);   
+   
+   ///////////////////////////////
+   // add & remove project data //
+   ///////////////////////////////
+   
+   // TODO BY SOULHAMMER
+   // verify failure
+   
+   //////////////////
+   // drop project //
+   //////////////////
+   
+   // this testing is to be failed.
+   // when project state is started, drop is impossible
+   
+   vector<permission_level> action_perm_3 = {{N(eb.factory), config::active_name}};   
+   variant pretty_trx_3 = fc::mutable_variant_object()
+      ("expiration", "2021-01-01T00:30")
+      ("ref_block_num", 2)
+      ("ref_block_prefix", 3)
+      ("max_net_usage_words", 0)
+      ("max_cpu_usage_ms", 0)
+      ("delay_sec", 0)
+      ("actions", fc::variants({
+            fc::mutable_variant_object()
+               ("account", name("eb.factory"))
+               ("name", "drop")
+               ("authorization", action_perm_3)
+               ("data", fc::mutable_variant_object()
+                ("project_index", project_1_index)
+               )
+               })
+      );
+
+   transaction trx_3;
+   abi_serializer::from_variant(pretty_trx_3, trx_3, get_resolver(), abi_serializer_max_time);
+   
+   // propose action
+   push_action( N(soula), N(propose), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("trx",           trx_3)
+                  ("requested", perm)
+   );   
+   
+   // approve
+   push_action( N(soula), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soula), config::active_name })
+   ); 
+   push_action( N(soulb), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soulb), config::active_name })
+   );   
+   push_action( N(soulc), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soulc), config::active_name })
+   );   
+   push_action( N(sould), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(sould), config::active_name })
+   ); 
+   push_action( N(soule), N(approve), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("level",         permission_level{ N(soule), config::active_name })
+   );  
+   
+   // execute
+   transaction_trace_ptr trace_3;
+   control->applied_transaction.connect([&]( const transaction_trace_ptr& t) { if (t->scheduled) { trace_3 = t; } } );
+
+   push_action( N(soula), N(exec), mvo()
+                  ("proposer",      "soula")
+                  ("proposal_name", "second")
+                  ("executer",      "soula")
+   );   
+   
+   BOOST_REQUIRE_EQUAL( false, bool(trace_3) );
+} FC_LOG_AND_RETHROW()
 
 BOOST_AUTO_TEST_SUITE_END()
-

@@ -18,6 +18,9 @@ void factory::create(name owner,
                      name helper) {
     require_auth( owner );         
     check(project_name.length() <= 32, "max project name length is 32");
+    
+    // TODO BY SOULHAMMER
+    // check user level (possible: participant, supporter, representative)
 
     checksum256 prj_name_hash = sha256(project_name.c_str(), project_name.length());
 
@@ -42,7 +45,7 @@ void factory::create(name owner,
         
         addProjectInfo(owner, project_index, url, hash, homepage, icon, helper);
     } else {
-        check(false, "already same project name exist");
+        check(false, "already project name exist");
     }
 }
 
@@ -145,16 +148,22 @@ void factory::drop(uint64_t project_index) {
     uint64_t detectedScope = getProjectScope(project_index);
     
     if (detectedScope == SCOPE_CREATED) {
-        project_table project_t(_self, SCOPE_CREATED);
+        project_table project_t(_self, detectedScope);
         auto itr = project_t.find(project_index);
         
         require_auth(itr->owner);
         project_t.erase(itr);
+    
         cleanProject(project_index);
     } else if (detectedScope == SCOPE_SELECTED || detectedScope == SCOPE_READIED) {
-        // TODY BY SOULHAMMER
-        // implement related logic
-        check(false, "not implemented");
+        // need msig by representatives
+        require_auth( _self );
+        
+        project_table project_t(_self, detectedScope);
+        auto itr = project_t.find(project_index);
+        project_t.erase(itr);
+    
+        cleanProject(project_index);
     } else if (detectedScope == SCOPE_STARTED) {
         check(false, "already project was started");
     } else if (detectedScope == SCOPE_DROPPED) {
@@ -164,26 +173,183 @@ void factory::drop(uint64_t project_index) {
     }
 }
 
-void factory::setready(uint64_t project_index) {
-
+void factory::setready(uint64_t project_index,
+                        uint64_t detail_index,
+                        uint64_t resource_index) {
+    // check existence of project (scope: selected)                            
+    project_table project_t_selected(_self, SCOPE_SELECTED);
+    auto itr_selected = project_t_selected.find(project_index);  
+    if (itr_selected != project_t_selected.end()) {
+        // only project owner has permission
+        require_auth(itr_selected->owner);      
+        
+        // move data in projects (scope: selected -> readied)
+        project_table project_t_readied(_self, SCOPE_READIED);    
+        auto itr_readied = project_t_readied.find(project_index);
+        if (itr_readied == project_t_readied.end()) {
+            project_t_readied.emplace(_self, [&](auto& a) {
+                a.index = itr_selected->index;
+                a.owner = itr_selected->owner;
+                a.proj_name = itr_selected->proj_name;
+                a.proj_name_hash = itr_selected->proj_name_hash;
+                a.selected_detail_index = itr_selected->selected_detail_index;
+                a.selected_resource_index = itr_selected->selected_resource_index;                
+                a.started_detail_index = detail_index;
+                a.started_resource_index = resource_index;
+            });  
+            
+            project_t_selected.erase(itr_selected);
+        } else {
+            check(false, "already project was readied");
+        }         
+    } else {
+        check(false, "non-project exist");
+    }
 }
 
 void factory::cancelready(uint64_t project_index) {
-
+    // need msig by representatives
+    require_auth( _self );    
+    
+    // check existence of project (scope: readied)                            
+    project_table project_t_readied(_self, SCOPE_READIED);
+    auto itr_readied = project_t_readied.find(project_index);  
+    if (itr_readied != project_t_readied.end()) {
+        // only project owner has permission
+        //require_auth(itr_readied->owner);
+        
+        // move data in projects (scope: readied -> selected)
+        project_table project_t_selected(_self, SCOPE_SELECTED);    
+        auto itr_selected = project_t_selected.find(project_index);
+        if (itr_selected == project_t_selected.end()) {
+            project_t_selected.emplace(_self, [&](auto& a) {
+                a.index = itr_readied->index;
+                a.owner = itr_readied->owner;
+                a.proj_name = itr_readied->proj_name;
+                a.proj_name_hash = itr_readied->proj_name_hash;
+                a.selected_detail_index = itr_readied->selected_detail_index;
+                a.selected_resource_index = itr_readied->selected_resource_index;                
+                a.started_detail_index = itr_readied->started_detail_index;
+                a.started_resource_index = itr_readied->started_resource_index;
+            });  
+            
+            project_t_readied.erase(itr_readied);
+        } else {
+            check(false, "already project was readied");
+        }         
+    } else {
+        check(false, "non-project exist");
+    }
 }
 
 void factory::select(uint64_t project_index,
                      uint64_t detail_index,
                      uint64_t resource_index,
                      name helper) {
-
+    // need msig by representatives
+    require_auth( _self );
+    
+    // check existence of project (scope: created)
+    project_table project_t_created(_self, SCOPE_CREATED);
+    auto itr_created = project_t_created.find(project_index);   
+    if (itr_created == project_t_created.end()) {
+        check(false, "non-project exist");
+    } else {
+        // check existence of projectinfo
+        projectinfo_table projectinfo_t(_self, project_index);
+        auto itr_projectinfo = projectinfo_t.find(detail_index);
+        if (itr_projectinfo == projectinfo_t.end()) {
+            check(false, "non-projectinfo exist");
+        } else {
+            // check projectinfos' helper
+            if ((itr_projectinfo->helper).to_string().empty()) {
+                projectinfo_t.modify( itr_projectinfo, _self, [&]( auto& v ) {
+                    v.helper = helper;
+                });
+            } else {
+                if (itr_projectinfo->helper != helper) {
+                    check(false, "existed helper is diff");        
+                }
+            }
+        }
+        
+        // move data in projects (scope: created -> selected)
+        project_table project_t_selected(_self, SCOPE_SELECTED);    
+        auto itr_selected = project_t_selected.find(project_index);
+        if (itr_selected == project_t_selected.end()) {
+            project_t_selected.emplace(_self, [&](auto& a) {
+                a.index = itr_created->index;
+                a.owner = itr_created->owner;
+                a.proj_name = itr_created->proj_name;
+                a.proj_name_hash = itr_created->proj_name_hash;
+                a.selected_detail_index = detail_index;
+                a.selected_resource_index = resource_index;
+            });  
+            
+            project_t_created.erase(itr_created);
+            
+            // TODO BY SOULHAMMER
+            // add data in "helpers" table
+        } else {
+            check(false, "already project was selected");
+        }        
+    }
 }
 
 void factory::start(uint64_t project_index,
                      uint64_t detail_index,
                      uint64_t resource_index,
                      name helper) {
-
+    // need msig by representatives
+    require_auth( _self );
+    
+    // check existence of project (scope: readied)
+    project_table project_t_readied(_self, SCOPE_READIED);
+    auto itr_readied = project_t_readied.find(project_index);   
+    if (itr_readied == project_t_readied.end()) {
+        check(false, "non-project exist");
+    } else {
+        // check existence of projectinfo
+        projectinfo_table projectinfo_t(_self, project_index);
+        auto itr_projectinfo = projectinfo_t.find(detail_index);
+        if (itr_projectinfo == projectinfo_t.end()) {
+            check(false, "non-projectinfo exist");
+        } else {
+            // check projectinfos' helper
+            if ((itr_projectinfo->helper).to_string().empty()) {
+                projectinfo_t.modify( itr_projectinfo, _self, [&]( auto& v ) {
+                    v.helper = helper;
+                });
+            } else {
+                if (itr_projectinfo->helper != helper) {
+                    check(false, "existed helper is diff");        
+                }
+            }
+        }
+        
+        // move data in projects (scope: readied -> started)
+        project_table project_t_started(_self, SCOPE_STARTED);    
+        auto itr_started = project_t_started.find(project_index);
+        if (itr_started == project_t_started.end()) {
+            project_t_started.emplace(_self, [&](auto& a) {
+                a.index = itr_readied->index;
+                a.owner = itr_readied->owner;
+                a.proj_name = itr_readied->proj_name;
+                a.proj_name_hash = itr_readied->proj_name_hash;
+                a.selected_detail_index = itr_readied->selected_detail_index;
+                a.selected_resource_index = itr_readied->selected_resource_index;                
+                a.started_detail_index = detail_index;
+                a.started_resource_index = resource_index;
+            });  
+            
+            project_t_readied.erase(itr_readied);
+            
+            // TODO BY SOULHAMMER
+            // add data in "helpers" table            
+        } else {
+            check(false, "already project was selected");
+        }        
+    }
 }
 
 void factory::addsuggest(uint64_t project_index,
