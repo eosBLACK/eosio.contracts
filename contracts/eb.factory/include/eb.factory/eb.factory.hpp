@@ -72,14 +72,16 @@ namespace eosio {
       EOSLIB_SERIALIZE( helper, (project_index)(helper_name)(isrewarded) )
    };   
    
-   struct [[eosio::table,eosio::contract("eb.factory")]] suggest {
+   struct [[eosio::table,eosio::contract("eb.factory")]] notice {
+      uint64_t index;
       uint64_t project_index;
       name proposer;
       string proposal;
 
-      uint64_t primary_key() const {return project_index;}
+      uint64_t primary_key() const {return index;}
+      uint64_t by_proj_index() const {return project_index;}
       
-      EOSLIB_SERIALIZE( suggest, (project_index)(proposer)(proposal) )
+      EOSLIB_SERIALIZE( notice, (index)(project_index)(proposer)(proposal) )
    };   
 
    typedef eosio::multi_index< "projects"_n, project, indexed_by<name("projnamehash"), const_mem_fun<project, checksum256, &project::by_proj_name_hash>> > project_table;
@@ -87,7 +89,7 @@ namespace eosio {
    typedef eosio::multi_index< "resources"_n, resource > resource_table;
    typedef eosio::multi_index< "payments"_n, payment > payment_table;
    typedef eosio::multi_index< "helpers"_n, helper > helper_table;
-   typedef eosio::multi_index< "suggests"_n, suggest > suggest_table;
+   typedef eosio::multi_index< "notices"_n, notice, indexed_by<name("projindex"), const_mem_fun<notice, uint64_t, &notice::by_proj_index>> > notice_table;
 
    class [[eosio::contract("eb.factory")]] factory : public contract {
       public:
@@ -152,12 +154,14 @@ namespace eosio {
                      name helper);
          
          [[eosio::action]]
-         void addsuggest(uint64_t project_index,
+         void pushnotice(uint64_t project_index,
                            name proposer,
-                           string proposal);
+                           string proposal,
+                           string target);
          
          [[eosio::action]]
-         void rmsuggest(uint64_t project_index);
+         void popnotice(uint64_t project_index,
+                        string target);
 
          using create_action = eosio::action_wrapper<"create"_n, &factory::create>;
          using addinfo_action = eosio::action_wrapper<"addinfo"_n, &factory::addinfo>;
@@ -170,8 +174,8 @@ namespace eosio {
          using drop_action = eosio::action_wrapper<"drop"_n, &factory::drop>;
          using select_action = eosio::action_wrapper<"select"_n, &factory::select>;
          using start_action = eosio::action_wrapper<"start"_n, &factory::start>;
-         using addsuggest_action = eosio::action_wrapper<"addsuggest"_n, &factory::addsuggest>;
-         using rmsuggest_action = eosio::action_wrapper<"rmsuggest"_n, &factory::rmsuggest>;         
+         using pushnotice_action = eosio::action_wrapper<"pushnotice"_n, &factory::pushnotice>;
+         using popnotice_action = eosio::action_wrapper<"popnotice"_n, &factory::popnotice>;         
          
       private:
          const string STATE_CREATED = "created";
@@ -181,12 +185,22 @@ namespace eosio {
          const string STATE_DROPPED = "dropped";
          const string STATE_NONE = "none";
          
-         const uint64_t SCOPE_CREATED = name(STATE_CREATED).value;
-         const uint64_t SCOPE_SELECTED = name(STATE_SELECTED).value;
-         const uint64_t SCOPE_READIED = name(STATE_READIED).value;
-         const uint64_t SCOPE_STARTED = name(STATE_STARTED).value;
-         const uint64_t SCOPE_DROPPED = name(STATE_DROPPED).value;
-         const uint64_t SCOPE_NONE  = name(STATE_NONE).value;
+         const string SUGGEST_SELECT = "select";
+         const string SUGGEST_START = "start";
+         const string SUGGEST_CANCELREADY = "cancelready";
+         const string SUGGEST_DROP = "drop";
+         
+         const uint64_t SCOPE_STATE_CREATED = name(STATE_CREATED).value;
+         const uint64_t SCOPE_STATE_SELECTED = name(STATE_SELECTED).value;
+         const uint64_t SCOPE_STATE_READIED = name(STATE_READIED).value;
+         const uint64_t SCOPE_STATE_STARTED = name(STATE_STARTED).value;
+         const uint64_t SCOPE_STATE_DROPPED = name(STATE_DROPPED).value;
+         const uint64_t SCOPE_STATE_NONE  = name(STATE_NONE).value;
+         
+         const uint64_t SCOPE_SUGGEST_SELECT = name(SUGGEST_SELECT).value;
+         const uint64_t SCOPE_SUGGEST_START = name(SUGGEST_START).value;
+         const uint64_t SCOPE_SUGGEST_CANCELREADY = name(SUGGEST_CANCELREADY).value;
+         const uint64_t SCOPE_SUGGEST_DROP = name(SUGGEST_DROP).value;
          
          void addProjectInfo(name owner,
                               uint64_t project_index,
@@ -203,6 +217,7 @@ namespace eosio {
          void deleteProjectHelper(uint64_t project_index);
          
          uint64_t getProjectScope(uint64_t project_index);
+         uint64_t target2Scope(string target);
    };
 
 } /// namespace eosio

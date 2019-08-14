@@ -27,7 +27,7 @@ void factory::create(name owner,
     // TODO BY SOULHAMMER 
     // check project name collision in all scope
 
-    project_table project_t(_self, SCOPE_CREATED);
+    project_table project_t(_self, SCOPE_STATE_CREATED);
     
     auto projectItems = project_t.get_index<name("projnamehash")>();
     auto itr = projectItems.find(prj_name_hash);
@@ -57,7 +57,7 @@ void factory::addinfo(uint64_t project_index,
                         name helper) {
     uint64_t detectedScope = getProjectScope(project_index);
     
-    if (detectedScope == SCOPE_CREATED || detectedScope == SCOPE_SELECTED) {
+    if (detectedScope == SCOPE_STATE_CREATED || detectedScope == SCOPE_STATE_SELECTED) {
         project_table project_t(_self, detectedScope);
         auto itr = project_t.find(project_index);  
         require_auth(itr->owner);
@@ -73,7 +73,7 @@ void factory::addresource(uint64_t project_index,
                            asset black_max_count) {
     uint64_t detectedScope = getProjectScope(project_index);
     
-    if (detectedScope == SCOPE_CREATED || detectedScope == SCOPE_SELECTED) {
+    if (detectedScope == SCOPE_STATE_CREATED || detectedScope == SCOPE_STATE_SELECTED) {
         project_table project_t(_self, detectedScope);
         auto itr = project_t.find(project_index);  
         require_auth(itr->owner);
@@ -93,7 +93,7 @@ void factory::rmresource(uint64_t project_index,
                            uint64_t resource_index) {
     uint64_t detectedScope = getProjectScope(project_index);
     
-    if (detectedScope == SCOPE_CREATED || detectedScope == SCOPE_SELECTED) {
+    if (detectedScope == SCOPE_STATE_CREATED || detectedScope == SCOPE_STATE_SELECTED) {
         project_table project_t(_self, detectedScope);
         auto itr = project_t.find(project_index);  
         require_auth(itr->owner);
@@ -111,7 +111,7 @@ void factory::addpayment(uint64_t project_index,
                            uint8_t percentage) {
     uint64_t detectedScope = getProjectScope(project_index);
     
-    if (detectedScope == SCOPE_CREATED || detectedScope == SCOPE_SELECTED) {
+    if (detectedScope == SCOPE_STATE_CREATED || detectedScope == SCOPE_STATE_SELECTED) {
         project_table project_t(_self, detectedScope);
         auto itr = project_t.find(project_index);  
         require_auth(itr->owner);
@@ -131,7 +131,7 @@ void factory::rmpayment(uint64_t project_index,
                         uint64_t payment_index) {
     uint64_t detectedScope = getProjectScope(project_index);
     
-    if (detectedScope == SCOPE_CREATED || detectedScope == SCOPE_SELECTED) {
+    if (detectedScope == SCOPE_STATE_CREATED || detectedScope == SCOPE_STATE_SELECTED) {
         project_table project_t(_self, detectedScope);
         auto itr = project_t.find(project_index);  
         require_auth(itr->owner);
@@ -147,7 +147,7 @@ void factory::rmpayment(uint64_t project_index,
 void factory::drop(uint64_t project_index) {
     uint64_t detectedScope = getProjectScope(project_index);
     
-    if (detectedScope == SCOPE_CREATED) {
+    if (detectedScope == SCOPE_STATE_CREATED) {
         project_table project_t(_self, detectedScope);
         auto itr = project_t.find(project_index);
         
@@ -155,7 +155,7 @@ void factory::drop(uint64_t project_index) {
         project_t.erase(itr);
     
         cleanProject(project_index);
-    } else if (detectedScope == SCOPE_SELECTED || detectedScope == SCOPE_READIED) {
+    } else if (detectedScope == SCOPE_STATE_SELECTED || detectedScope == SCOPE_STATE_READIED) {
         // need msig by representatives
         require_auth( _self );
         
@@ -164,11 +164,11 @@ void factory::drop(uint64_t project_index) {
         project_t.erase(itr);
     
         cleanProject(project_index);
-    } else if (detectedScope == SCOPE_STARTED) {
+    } else if (detectedScope == SCOPE_STATE_STARTED) {
         check(false, "already project was started");
-    } else if (detectedScope == SCOPE_DROPPED) {
+    } else if (detectedScope == SCOPE_STATE_DROPPED) {
         check(false, "already project was dropped");
-    } else if (detectedScope == SCOPE_NONE) {
+    } else if (detectedScope == SCOPE_STATE_NONE) {
         check(false, "project doesn't exist");
     }
 }
@@ -177,14 +177,14 @@ void factory::setready(uint64_t project_index,
                         uint64_t detail_index,
                         uint64_t resource_index) {
     // check existence of project (scope: selected)                            
-    project_table project_t_selected(_self, SCOPE_SELECTED);
+    project_table project_t_selected(_self, SCOPE_STATE_SELECTED);
     auto itr_selected = project_t_selected.find(project_index);  
     if (itr_selected != project_t_selected.end()) {
         // only project owner has permission
         require_auth(itr_selected->owner);      
         
         // move data in projects (scope: selected -> readied)
-        project_table project_t_readied(_self, SCOPE_READIED);    
+        project_table project_t_readied(_self, SCOPE_STATE_READIED);    
         auto itr_readied = project_t_readied.find(project_index);
         if (itr_readied == project_t_readied.end()) {
             project_t_readied.emplace(_self, [&](auto& a) {
@@ -212,14 +212,14 @@ void factory::cancelready(uint64_t project_index) {
     require_auth( _self );    
     
     // check existence of project (scope: readied)                            
-    project_table project_t_readied(_self, SCOPE_READIED);
+    project_table project_t_readied(_self, SCOPE_STATE_READIED);
     auto itr_readied = project_t_readied.find(project_index);  
     if (itr_readied != project_t_readied.end()) {
         // only project owner has permission
         //require_auth(itr_readied->owner);
         
         // move data in projects (scope: readied -> selected)
-        project_table project_t_selected(_self, SCOPE_SELECTED);    
+        project_table project_t_selected(_self, SCOPE_STATE_SELECTED);    
         auto itr_selected = project_t_selected.find(project_index);
         if (itr_selected == project_t_selected.end()) {
             project_t_selected.emplace(_self, [&](auto& a) {
@@ -250,7 +250,7 @@ void factory::select(uint64_t project_index,
     require_auth( _self );
     
     // check existence of project (scope: created)
-    project_table project_t_created(_self, SCOPE_CREATED);
+    project_table project_t_created(_self, SCOPE_STATE_CREATED);
     auto itr_created = project_t_created.find(project_index);   
     if (itr_created == project_t_created.end()) {
         check(false, "non-project exist");
@@ -274,7 +274,7 @@ void factory::select(uint64_t project_index,
         }
         
         // move data in projects (scope: created -> selected)
-        project_table project_t_selected(_self, SCOPE_SELECTED);    
+        project_table project_t_selected(_self, SCOPE_STATE_SELECTED);    
         auto itr_selected = project_t_selected.find(project_index);
         if (itr_selected == project_t_selected.end()) {
             project_t_selected.emplace(_self, [&](auto& a) {
@@ -304,7 +304,7 @@ void factory::start(uint64_t project_index,
     require_auth( _self );
     
     // check existence of project (scope: readied)
-    project_table project_t_readied(_self, SCOPE_READIED);
+    project_table project_t_readied(_self, SCOPE_STATE_READIED);
     auto itr_readied = project_t_readied.find(project_index);   
     if (itr_readied == project_t_readied.end()) {
         check(false, "non-project exist");
@@ -328,7 +328,7 @@ void factory::start(uint64_t project_index,
         }
         
         // move data in projects (scope: readied -> started)
-        project_table project_t_started(_self, SCOPE_STARTED);    
+        project_table project_t_started(_self, SCOPE_STATE_STARTED);    
         auto itr_started = project_t_started.find(project_index);
         if (itr_started == project_t_started.end()) {
             project_t_started.emplace(_self, [&](auto& a) {
@@ -352,14 +352,38 @@ void factory::start(uint64_t project_index,
     }
 }
 
-void factory::addsuggest(uint64_t project_index,
+void factory::pushnotice(uint64_t project_index,
                            name proposer,
-                           string proposal) {
+                           string proposal,
+                           string target) {
+    require_auth( proposer );
     
+    // TODO BY SOULHAMMER
+    // checking existed proposer & proposal
+    
+    uint64_t selectedScope = target2Scope(target);
+    notice_table notice_t(_self, selectedScope);
+
+    notice_t.emplace(proposer, [&](auto& a) {
+        a.index = notice_t.available_primary_key();
+        a.project_index = project_index;
+        a.proposer = proposer;
+        a.proposal = proposal;
+    });  
 }
 
-void factory::rmsuggest(uint64_t project_index) {
-
+void factory::popnotice(uint64_t index, 
+                        string target) {
+    uint64_t selectedScope = target2Scope(target);
+    notice_table notice_t(_self, selectedScope);
+    auto itr = notice_t.find(index);
+    if (itr != notice_t.end()) {
+        require_auth(itr->proposer);
+        
+        notice_t.erase(itr);
+    } else {
+        check(false, "non-project exist");   
+    } 
 }
 
 
@@ -420,7 +444,7 @@ void factory::deleteProjectPayment(uint64_t project_index) {
 } 
 
 void factory::deleteProjectHelper(uint64_t project_index) {
-    helper_table helper_t(_self, SCOPE_SELECTED);
+    helper_table helper_t(_self, SCOPE_STATE_SELECTED);
     
     auto itr = helper_t.find(project_index);
     if (itr != helper_t.end()) {
@@ -431,24 +455,42 @@ void factory::deleteProjectHelper(uint64_t project_index) {
 uint64_t factory::getProjectScope(uint64_t project_index) {
     uint64_t result;
     
-    project_table project_t_created(_self, SCOPE_CREATED);
-    project_table project_t_selected(_self, SCOPE_SELECTED);
-    project_table project_t_readied(_self, SCOPE_READIED);
-    project_table project_t_started(_self, SCOPE_STARTED);
-    project_table project_t_dropped(_self, SCOPE_DROPPED);
+    project_table project_t_created(_self, SCOPE_STATE_CREATED);
+    project_table project_t_selected(_self, SCOPE_STATE_SELECTED);
+    project_table project_t_readied(_self, SCOPE_STATE_READIED);
+    project_table project_t_started(_self, SCOPE_STATE_STARTED);
+    project_table project_t_dropped(_self, SCOPE_STATE_DROPPED);
     
     if (project_t_created.find(project_index) != project_t_created.end()) {
-        result = SCOPE_CREATED;
+        result = SCOPE_STATE_CREATED;
     } else if (project_t_selected.find(project_index) != project_t_selected.end()) {
-        result = SCOPE_SELECTED;
+        result = SCOPE_STATE_SELECTED;
     } else if (project_t_readied.find(project_index) != project_t_readied.end()) {
-        result = SCOPE_READIED;
+        result = SCOPE_STATE_READIED;
     } else if (project_t_started.find(project_index) != project_t_started.end()) {
-        result = SCOPE_STARTED;
+        result = SCOPE_STATE_STARTED;
     } else if (project_t_dropped.find(project_index) != project_t_dropped.end()) {
-        result = SCOPE_DROPPED;
+        result = SCOPE_STATE_DROPPED;
     } else {
-        result = SCOPE_NONE;
+        result = SCOPE_STATE_NONE;
+    }
+    
+    return result;
+}
+
+uint64_t factory::target2Scope(string target) {
+    uint64_t result;
+    
+    if (!target.compare(SUGGEST_SELECT)) {
+        result = SCOPE_SUGGEST_SELECT;
+    } else if (!target.compare(SUGGEST_START)) {
+        result = SCOPE_SUGGEST_START;
+    } else if (!target.compare(SUGGEST_CANCELREADY)) {
+        result = SCOPE_SUGGEST_CANCELREADY;
+    } else if (!target.compare(SUGGEST_DROP)) {
+        result = SCOPE_SUGGEST_DROP;
+    } else {
+        check(false, "target is incorrect");
     }
     
     return result;
@@ -457,5 +499,5 @@ uint64_t factory::getProjectScope(uint64_t project_index) {
 } /// namespace eosio
 
 EOSIO_DISPATCH( eosio::factory, (create)(addinfo)(addresource)(rmresource)(addpayment)(rmpayment)
-                                (setready)(cancelready)(drop)(select)(start)(addsuggest)(rmsuggest) )
+                                (setready)(cancelready)(drop)(select)(start)(pushnotice)(popnotice) )
 
