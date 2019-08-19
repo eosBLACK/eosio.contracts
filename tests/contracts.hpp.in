@@ -25,6 +25,9 @@ struct contracts {
    static std::vector<uint8_t> faucet_wasm() { return read_wasm("${CMAKE_BINARY_DIR}/../contracts/eb.faucet/eb.faucet.wasm"); }
    static std::string          faucet_wast() { return read_wast("${CMAKE_BINARY_DIR}/../contracts/eb.faucet/eb.faucet.wast"); }
    static std::vector<char>    faucet_abi() { return read_abi("${CMAKE_BINARY_DIR}/../contracts/eb.faucet/eb.faucet.abi"); }   
+   static std::vector<uint8_t> factory_wasm() { return read_wasm("${CMAKE_BINARY_DIR}/../contracts/eb.factory/eb.factory.wasm"); }
+   static std::string          factory_wast() { return read_wast("${CMAKE_BINARY_DIR}/../contracts/eb.factory/eb.factory.wast"); }
+   static std::vector<char>    factory_abi() { return read_abi("${CMAKE_BINARY_DIR}/../contracts/eb.factory/eb.factory.abi"); }      
 
    struct util {
       static std::vector<uint8_t> test_api_wasm() { return read_wasm("${CMAKE_SOURCE_DIR}/test_contracts/test_api.wasm"); }

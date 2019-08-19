@@ -31,5 +31,8 @@ include_directories(${CMAKE_BINARY_DIR})
 file(GLOB UNIT_TESTS "*.cpp" "*.hpp")
 #file(GLOB UNIT_TESTS "main.cpp" "test_symbol.hpp" "eosio.system_tester.hpp" "eb.member_tests.cpp")
 #file(GLOB UNIT_TESTS "main.cpp" "test_symbol.hpp" "eb.member_tests.cpp")
+#file(GLOB UNIT_TESTS "main.cpp" "test_symbol.hpp" "eosio.msig_tests.cpp")
+#file(GLOB UNIT_TESTS "main.cpp" "test_symbol.hpp" "eb.factory_tests.cpp")
+
 
 add_eosio_test( unit_test ${UNIT_TESTS} )
