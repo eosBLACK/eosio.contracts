@@ -19,16 +19,15 @@ using mvo = fc::mutable_variant_object;
 
 class eb_factory_tester : public tester {
 public:
+   enum members { participants = 0, supporters, reprecandi };
+   const char *members_str[4]={ "participants","supporters", "reprecandi" }; 
+
    eb_factory_tester() {
-      create_accounts( { N(eb.factory), N(eosio.msig), N(eosio.stake), N(eosio.ram), N(eosio.ramfee), N(alice), N(bob), N(carol) } );
+      create_accounts( { N(eb.factory), N(eb.member), N(eosio.msig), N(eosio.stake), N(eosio.ram), N(eosio.ramfee) } );
+      
       produce_block();      
       
-      //produce_blocks( 2 );
-
-      //create_account_with_resources( N(eb.factory), config::system_account_name, core_sym::from_string("20.0000"), false );
-
-      //produce_blocks( 100 );      
-      
+      // deploy eb.factory
       set_code( N(eb.factory), contracts::factory_wasm());
       set_abi( N(eb.factory), contracts::factory_abi().data() );
       {
@@ -44,8 +43,28 @@ public:
                                                ("account", "eb.factory")
                                                ("is_priv", 1)
          );
+      }       
+      
+      // deploy eb.member
+      // for inline-action
+      set_code( N(eb.member), contracts::member_wasm());
+      set_abi( N(eb.member), contracts::member_abi().data() );
+      {
+         const auto& accnt = control->db().get<account_object,by_name>( N(eb.member) );
+         abi_def abi;
+         BOOST_REQUIRE_EQUAL(abi_serializer::to_abi(accnt.abi, abi), true);
+         member_abi_ser.set_abi(abi, abi_serializer_max_time);
       } 
       
+      {
+         auto trace = base_tester::push_action(config::system_account_name, N(setpriv),
+                                               config::system_account_name,  mutable_variant_object()
+                                               ("account", "eb.member")
+                                               ("is_priv", 1)
+         );
+      }       
+      
+      // deploy eb.msig
       set_code( N(eosio.msig), contracts::msig_wasm() );
       set_abi( N(eosio.msig), contracts::msig_abi().data() );
       {
@@ -107,6 +126,7 @@ public:
       trx.sign( get_private_key( creator, "active" ), control->get_chain_id()  );
       return push_transaction( trx );
    }
+
    void create_currency( name contract, name manager, asset maxsupply ) {
       auto act =  mutable_variant_object()
          ("issuer",       manager )
@@ -114,6 +134,7 @@ public:
 
       base_tester::push_action(contract, N(create), contract, act );
    }
+
    void issue( name to, const asset& amount, name manager = config::system_account_name ) {
       base_tester::push_action( N(eosio.token), N(issue), manager, mutable_variant_object()
                                 ("to",      to )
@@ -121,6 +142,7 @@ public:
                                 ("memo", "")
                                 );
    }
+
    void transfer( name from, name to, const string& amount, name manager = config::system_account_name ) {
       base_tester::push_action( N(eosio.token), N(transfer), manager, mutable_variant_object()
                                 ("from",    from)
@@ -129,6 +151,7 @@ public:
                                 ("memo", "")
                                 );
    }
+
    asset get_balance( const account_name& act ) {
       //return get_currency_balance( config::system_account_name, symbol(CORE_SYMBOL), act );
       //temporary code. current get_currency_balancy uses table name N(accounts) from currency.h
@@ -173,6 +196,17 @@ public:
 
    transaction reqauth( account_name from, const vector<permission_level>& auths, const fc::microseconds& max_serialization_time );
 
+   action_result push_action_eb_member( const account_name& signer, const action_name &name, const variant_object &data, bool auth = true ) {
+         string action_type_name = member_abi_ser.get_action_type(name);
+
+         action act;
+         act.account = N(eb.member);
+         act.name = name;
+         act.data = member_abi_ser.variant_to_binary( action_type_name, data, abi_serializer_max_time );
+
+         return base_tester::push_action( std::move(act), auth ? uint64_t(signer) : signer == N(bob111111111) ? N(alice1111111) : N(bob111111111) );
+   }
+
    action_result push_action_eb( const account_name& signer, const action_name &name, const variant_object &data, bool auth = true ) {
          string action_type_name = factory_abi_ser.get_action_type(name);
 
@@ -184,6 +218,8 @@ public:
          return base_tester::push_action( std::move(act), auth ? uint64_t(signer) : signer == N(bob) ? N(alice) : N(bob) );
    }
 
+   // For membership checking, call inline-action internally 
+   // eb.member -> ismember()
    action_result create_eb( const account_name& owner, 
                               const std::string& project_name, 
                               const std::string& url, 
@@ -327,9 +363,127 @@ public:
       vector<char> data = get_row_by_account( N(eb.factory), scope, N(payments), index );  
       return data.empty() ? fc::variant() : factory_abi_ser.binary_to_variant( "payment", data, abi_serializer_max_time );
    }    
+     
+   action_result setcriteria( const name& member_type, const asset& low_quantity, const asset& high_quantity ) {
+      return push_action_eb_member( N(eb.member), N(setcriteria), mvo()
+                           ("member_type", member_type)
+                           ("low_quantity", low_quantity)
+                           ("high_quantity", high_quantity)
+      );
+   }
+   
+   action_result stake_eb_member( const account_name& from, const account_name& to, const asset& net, const asset& cpu ) {
+      return push_action_eb_member( name(from), N(staking), mvo()
+                          ("from",     from)
+                          ("receiver", to)
+                          ("stake_net_quantity", net)
+                          ("stake_cpu_quantity", cpu)
+                          ("transfer", 0 )
+      );
+   }   
+
+   fc::variant get_criteria(const name& account)
+   {
+      vector<char> data = get_row_by_account( N(eb.member), N(eb.member), N(criterias), account.value );  
+      return data.empty() ? fc::variant() : member_abi_ser.binary_to_variant( "criteria", data, abi_serializer_max_time );
+   }   
+   
+   
+   void setPreCondition(string participant_low, string participant_high, 
+                        string supporter_low, string supporter_high,
+                        string representative_low, string representative_high) {
+      //////////////////
+      // set criteria //
+      //////////////////
+      BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[participants]), asset::from_string(participant_low), asset::from_string(participant_high)) );
+      auto criteria = get_criteria(name(members_str[participants]));
+      REQUIRE_MATCHING_OBJECT( criteria, mvo()
+         ("member_type", members_str[participants])
+         ("low_quantity", participant_low)
+         ("high_quantity", participant_high)
+      );
+      
+      BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[supporters]), asset::from_string(supporter_low), asset::from_string(supporter_high)) );
+      criteria = get_criteria(name(members_str[supporters]));
+      REQUIRE_MATCHING_OBJECT( criteria, mvo()
+         ("member_type", members_str[supporters])
+         ("low_quantity", supporter_low)
+         ("high_quantity", supporter_high)
+      );   
+      
+      BOOST_REQUIRE_EQUAL( success(), setcriteria( name(members_str[reprecandi]), asset::from_string(representative_low), asset::from_string(representative_high)) );
+      criteria = get_criteria(name(members_str[reprecandi]));
+      REQUIRE_MATCHING_OBJECT( criteria, mvo()
+         ("member_type", members_str[reprecandi])
+         ("low_quantity", representative_low)
+         ("high_quantity", representative_high)
+      );    
+      
+      ////////////
+      // set BP //
+      ////////////
+      set_authority(N(eb.factory), "active", authority(1,
+         vector<key_weight>{{get_private_key("eb.factory", "active").get_public_key(), 1}},
+         vector<permission_level_weight>{{{N(eosio.prods), config::active_name}, 1}}), "owner",
+         { { N(eb.factory), "active" } }, { get_private_key( N(eb.factory), "active" ) });
+   
+      create_accounts( { N(soula) } );
+      create_accounts( { N(soulb) } );
+      create_accounts( { N(soulc) } );
+      create_accounts( { N(sould) } );
+      create_accounts( { N(soule) } );
+      create_accounts( { N(soulf) } );
+      set_producers( {N(soula),N(soulb),N(soulc), 
+                        N(sould),N(soule),N(soulf)} );
+      produce_blocks(50);
+      
+      create_accounts( { N(eosio.token) } );
+      set_code( N(eosio.token), contracts::token_wasm() );
+      set_abi( N(eosio.token), contracts::token_abi().data() );
+   
+      create_currency( N(eosio.token), config::system_account_name, core_sym::from_string("10000000000.0000") );
+      issue(config::system_account_name, core_sym::from_string("1000000000.0000"));
+      BOOST_REQUIRE_EQUAL( core_sym::from_string("1000000000.0000"), get_balance( "eosio" ) );
+   
+      set_code( config::system_account_name, contracts::system_wasm() );
+      set_abi( config::system_account_name, contracts::system_abi().data() );
+      base_tester::push_action( config::system_account_name, N(init),
+                                config::system_account_name,  mutable_variant_object()
+                                    ("version", 0)
+                                    ("core", CORE_SYM_STR)
+      );
+      produce_blocks();
+      
+      /////////////////////
+      // join membership //      
+      /////////////////////
+      create_account_with_resources( N(alice), N(eosio), core_sym::from_string("1.0000"), false );
+      create_account_with_resources( N(bob), N(eosio), core_sym::from_string("0.4500"), false );
+      create_account_with_resources( N(carol), N(eosio), core_sym::from_string("1.0000"), false );      
+
+      // pre-condition
+      // init staking amount: 20
+      BOOST_REQUIRE_EQUAL( core_sym::from_string("0.0000"), get_balance( "alice" ) );
+      transfer( "eosio", "alice", "5000.0000 BLACK", "eosio" );
+      BOOST_REQUIRE_EQUAL( core_sym::from_string("5000.0000"), get_balance( "alice" ) );
+
+      BOOST_REQUIRE_EQUAL( core_sym::from_string("0.0000"), get_balance( "bob" ) );
+      transfer( "eosio", "bob", "5000.0000 BLACK", "eosio" );
+      BOOST_REQUIRE_EQUAL( core_sym::from_string("5000.0000"), get_balance( "bob" ) );
+
+      BOOST_REQUIRE_EQUAL( core_sym::from_string("0.0000"), get_balance( "carol" ) );
+      transfer( "eosio", "carol", "5000.0000  BLACK", "eosio" );
+      BOOST_REQUIRE_EQUAL( core_sym::from_string("5000.0000"), get_balance( "carol" ) );
+
+      // total staking amount: 50
+      BOOST_REQUIRE_EQUAL( success(), stake_eb_member( "alice", "alice", core_sym::from_string("15.0000"), core_sym::from_string("15.0000") ) );
+      BOOST_REQUIRE_EQUAL( success(), stake_eb_member( "bob", "bob", core_sym::from_string("15.0000"), core_sym::from_string("15.0000") ) );
+      BOOST_REQUIRE_EQUAL( success(), stake_eb_member( "carol", "carol", core_sym::from_string("15.0000"), core_sym::from_string("15.0000") ) );
+   }   
    
    abi_serializer factory_abi_ser;
    abi_serializer msig_abi_ser;
+   abi_serializer member_abi_ser;
 };
 
 transaction eb_factory_tester::reqauth( account_name from, const vector<permission_level>& auths, const fc::microseconds& max_serialization_time ) {
@@ -424,6 +578,26 @@ uint64_t aftertime_3 = 30000;
 int8_t percentage_3 = 60; 
 
 BOOST_FIXTURE_TEST_CASE( create_add_rm_drop, eb_factory_tester ) try {
+   ///////////////////
+   // pre-condition //
+   ///////////////////
+   
+   // 1. set criterias
+   // participant: 50 ~ 99
+   // supporter: 100 ~ 199
+   // representative_candidate: 200 ~ 500
+   
+   // 2. BP setting
+   
+   // 3. Join membership
+   // alice, bob, carol
+   setPreCondition("50.0000 BLACK", "99.0000 BLACK", 
+                  "100.0000 BLACK", "199.0000 BLACK", 
+                  "200.0000 BLACK", "500.0000 BLACK");     
+   
+   ////////////////////
+   // create project //
+   ////////////////////   
    // create project_1
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
@@ -652,10 +826,26 @@ BOOST_FIXTURE_TEST_CASE( create_add_rm_drop, eb_factory_tester ) try {
 } FC_LOG_AND_RETHROW()
 
 BOOST_FIXTURE_TEST_CASE( select_drop, eb_factory_tester ) try {
+   ///////////////////
+   // pre-condition //
+   ///////////////////
+   
+   // 1. set criterias
+   // participant: 50 ~ 99
+   // supporter: 100 ~ 199
+   // representative_candidate: 200 ~ 500
+   
+   // 2. BP setting
+   
+   // 3. Join membership
+   // alice, bob, carol
+   setPreCondition("50.0000 BLACK", "99.0000 BLACK", 
+                  "100.0000 BLACK", "199.0000 BLACK", 
+                  "200.0000 BLACK", "500.0000 BLACK");   
+                  
    ////////////////////
    // create project //
-   ////////////////////
-   
+   ////////////////////   
    // create project_1
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
@@ -718,27 +908,10 @@ BOOST_FIXTURE_TEST_CASE( select_drop, eb_factory_tester ) try {
    ////////////////////
    // select project //
    ////////////////////
-   
-   // pre-work   
-   set_authority(N(eb.factory), "active", authority(1,
-      vector<key_weight>{{get_private_key("eb.factory", "active").get_public_key(), 1}},
-      vector<permission_level_weight>{{{N(eosio.prods), config::active_name}, 1}}), "owner",
-      { { N(eb.factory), "active" } }, { get_private_key( N(eb.factory), "active" ) });
-
-   create_accounts( { N(soula) } );
-   create_accounts( { N(soulb) } );
-   create_accounts( { N(soulc) } );
-   create_accounts( { N(sould) } );
-   create_accounts( { N(soule) } );
-   create_accounts( { N(soulf) } );
-   set_producers( {N(soula),N(soulb),N(soulc), 
-                     N(sould),N(soule),N(soulf)} );
-   produce_blocks(50);
-   
    vector<permission_level> perm = { { N(soula), config::active_name }, { N(soulb), config::active_name },
                                        {N(soulc), config::active_name}, {N(sould), config::active_name},
                                        {N(soule), config::active_name}, {N(soulf), config::active_name}
-   };
+   };     
 
    // select project_1
    // helper is updated
@@ -1115,10 +1288,26 @@ BOOST_FIXTURE_TEST_CASE( select_drop, eb_factory_tester ) try {
 } FC_LOG_AND_RETHROW()
 
 BOOST_FIXTURE_TEST_CASE( ready_add_rm_cancel_drop, eb_factory_tester ) try {
+   ///////////////////
+   // pre-condition //
+   ///////////////////
+   
+   // 1. set criterias
+   // participant: 50 ~ 99
+   // supporter: 100 ~ 199
+   // representative_candidate: 200 ~ 500
+   
+   // 2. BP setting
+   
+   // 3. Join membership
+   // alice, bob, carol
+   setPreCondition("50.0000 BLACK", "99.0000 BLACK", 
+                  "100.0000 BLACK", "199.0000 BLACK", 
+                  "200.0000 BLACK", "500.0000 BLACK");   
+                  
    ////////////////////
    // create project //
-   ////////////////////
-   
+   ////////////////////   
    // create project_1
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
@@ -1181,26 +1370,10 @@ BOOST_FIXTURE_TEST_CASE( ready_add_rm_cancel_drop, eb_factory_tester ) try {
    ////////////////////
    // select project //
    ////////////////////
-   
-   set_authority(N(eb.factory), "active", authority(1,
-      vector<key_weight>{{get_private_key("eb.factory", "active").get_public_key(), 1}},
-      vector<permission_level_weight>{{{N(eosio.prods), config::active_name}, 1}}), "owner",
-      { { N(eb.factory), "active" } }, { get_private_key( N(eb.factory), "active" ) });
-
-   create_accounts( { N(soula) } );
-   create_accounts( { N(soulb) } );
-   create_accounts( { N(soulc) } );
-   create_accounts( { N(sould) } );
-   create_accounts( { N(soule) } );
-   create_accounts( { N(soulf) } );
-   set_producers( {N(soula),N(soulb),N(soulc), 
-                     N(sould),N(soule),N(soulf)} );
-   produce_blocks(50);
-   
    vector<permission_level> perm = { { N(soula), config::active_name }, { N(soulb), config::active_name },
                                        {N(soulc), config::active_name}, {N(sould), config::active_name},
                                        {N(soule), config::active_name}, {N(soulf), config::active_name}
-   };
+   };    
 
    // select project_1
    vector<permission_level> action_perm = {{N(eb.factory), config::active_name}};   
@@ -1512,10 +1685,26 @@ BOOST_FIXTURE_TEST_CASE( ready_add_rm_cancel_drop, eb_factory_tester ) try {
 } FC_LOG_AND_RETHROW()
 
 BOOST_FIXTURE_TEST_CASE( start_add_rm_drop, eb_factory_tester ) try {
+   ///////////////////
+   // pre-condition //
+   ///////////////////
+   
+   // 1. set criterias
+   // participant: 50 ~ 99
+   // supporter: 100 ~ 199
+   // representative_candidate: 200 ~ 500
+   
+   // 2. BP setting
+   
+   // 3. Join membership
+   // alice, bob, carol
+   setPreCondition("50.0000 BLACK", "99.0000 BLACK", 
+                  "100.0000 BLACK", "199.0000 BLACK", 
+                  "200.0000 BLACK", "500.0000 BLACK");   
+
    ////////////////////
    // create project //
-   ////////////////////
-   
+   ////////////////////   
    // create project_1
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
@@ -1578,27 +1767,10 @@ BOOST_FIXTURE_TEST_CASE( start_add_rm_drop, eb_factory_tester ) try {
    ////////////////////
    // select project //
    ////////////////////
-   
-   // pre-work
-   set_authority(N(eb.factory), "active", authority(1,
-      vector<key_weight>{{get_private_key("eb.factory", "active").get_public_key(), 1}},
-      vector<permission_level_weight>{{{N(eosio.prods), config::active_name}, 1}}), "owner",
-      { { N(eb.factory), "active" } }, { get_private_key( N(eb.factory), "active" ) });
-
-   create_accounts( { N(soula) } );
-   create_accounts( { N(soulb) } );
-   create_accounts( { N(soulc) } );
-   create_accounts( { N(sould) } );
-   create_accounts( { N(soule) } );
-   create_accounts( { N(soulf) } );
-   set_producers( {N(soula),N(soulb),N(soulc), 
-                     N(sould),N(soule),N(soulf)} );
-   produce_blocks(50);
-   
    vector<permission_level> perm = { { N(soula), config::active_name }, { N(soulb), config::active_name },
                                        {N(soulc), config::active_name}, {N(sould), config::active_name},
                                        {N(soule), config::active_name}, {N(soulf), config::active_name}
-   };
+   }; 
 
    // select project_1
    vector<permission_level> action_perm = {{N(eb.factory), config::active_name}};   
