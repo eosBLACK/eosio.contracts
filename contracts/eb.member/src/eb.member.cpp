@@ -71,6 +71,29 @@ void member::unstaking( name from,
     update_member_type(old_mem_type, new_mem_type, receiver);
 }
 
+void member::ismember( name account ) {
+    participant_table participant_t(_self, _self.value);
+    supporter_table supporter_t(_self, _self.value);
+    representative_candidate_table representative_candidate_t(_self, _self.value);
+    
+    auto type =  participant_t.find(account.value);
+    if (type == participant_t.end()) {
+        auto type =  supporter_t.find(account.value);
+        if (type == supporter_t.end()) {
+            auto type =  representative_candidate_t.find(account.value);
+            if (type == representative_candidate_t.end()) {
+                check(false, "this account isn't member");
+            } else {
+                
+            }              
+        } else {
+               
+        }         
+    } else {
+             
+    }         
+}
+
 void member::deletetables(name target_scope) {
     participant_table participant_t(_self, target_scope.value);
     supporter_table supporter_t(_self, target_scope.value);
@@ -234,5 +257,5 @@ void member::update_member_type(string old_type, string new_type, name account) 
 
 } /// namespace eosio
 
-EOSIO_DISPATCH( eosio::member, (staking)(unstaking)(setcriteria)(deletetables) )
+EOSIO_DISPATCH( eosio::member, (staking)(unstaking)(setcriteria)(ismember)(deletetables) )
 
