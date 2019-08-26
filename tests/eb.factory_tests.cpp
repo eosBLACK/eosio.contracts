@@ -126,7 +126,7 @@ public:
       trx.sign( get_private_key( creator, "active" ), control->get_chain_id()  );
       return push_transaction( trx );
    }
-   
+
    void create_currency( name contract, name manager, asset maxsupply ) {
       auto act =  mutable_variant_object()
          ("issuer",       manager )
@@ -134,7 +134,7 @@ public:
 
       base_tester::push_action(contract, N(create), contract, act );
    }
-   
+
    void issue( name to, const asset& amount, name manager = config::system_account_name ) {
       base_tester::push_action( N(eosio.token), N(issue), manager, mutable_variant_object()
                                 ("to",      to )
@@ -142,7 +142,7 @@ public:
                                 ("memo", "")
                                 );
    }
-   
+
    void transfer( name from, name to, const string& amount, name manager = config::system_account_name ) {
       base_tester::push_action( N(eosio.token), N(transfer), manager, mutable_variant_object()
                                 ("from",    from)
@@ -151,7 +151,7 @@ public:
                                 ("memo", "")
                                 );
    }
-   
+
    asset get_balance( const account_name& act ) {
       //return get_currency_balance( config::system_account_name, symbol(CORE_SYMBOL), act );
       //temporary code. current get_currency_balancy uses table name N(accounts) from currency.h
@@ -363,8 +363,7 @@ public:
       vector<char> data = get_row_by_account( N(eb.factory), scope, N(payments), index );  
       return data.empty() ? fc::variant() : factory_abi_ser.binary_to_variant( "payment", data, abi_serializer_max_time );
    }    
-   
-   
+     
    action_result setcriteria( const name& member_type, const asset& low_quantity, const asset& high_quantity ) {
       return push_action_eb_member( N(eb.member), N(setcriteria), mvo()
                            ("member_type", member_type)
@@ -599,7 +598,6 @@ BOOST_FIXTURE_TEST_CASE( create_add_rm_drop, eb_factory_tester ) try {
    ////////////////////
    // create project //
    ////////////////////   
-   
    // create project_1
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
@@ -847,8 +845,7 @@ BOOST_FIXTURE_TEST_CASE( select_drop, eb_factory_tester ) try {
                   
    ////////////////////
    // create project //
-   ////////////////////
-   
+   ////////////////////   
    // create project_1
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
@@ -911,12 +908,11 @@ BOOST_FIXTURE_TEST_CASE( select_drop, eb_factory_tester ) try {
    ////////////////////
    // select project //
    ////////////////////
-   
    vector<permission_level> perm = { { N(soula), config::active_name }, { N(soulb), config::active_name },
                                        {N(soulc), config::active_name}, {N(sould), config::active_name},
                                        {N(soule), config::active_name}, {N(soulf), config::active_name}
    };     
-   
+
    // select project_1
    // helper is updated
    vector<permission_level> action_perm = {{N(eb.factory), config::active_name}};   
@@ -1311,8 +1307,7 @@ BOOST_FIXTURE_TEST_CASE( ready_add_rm_cancel_drop, eb_factory_tester ) try {
                   
    ////////////////////
    // create project //
-   ////////////////////
-   
+   ////////////////////   
    // create project_1
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
@@ -1375,7 +1370,6 @@ BOOST_FIXTURE_TEST_CASE( ready_add_rm_cancel_drop, eb_factory_tester ) try {
    ////////////////////
    // select project //
    ////////////////////
-   
    vector<permission_level> perm = { { N(soula), config::active_name }, { N(soulb), config::active_name },
                                        {N(soulc), config::active_name}, {N(sould), config::active_name},
                                        {N(soule), config::active_name}, {N(soulf), config::active_name}
@@ -1707,11 +1701,10 @@ BOOST_FIXTURE_TEST_CASE( start_add_rm_drop, eb_factory_tester ) try {
    setPreCondition("50.0000 BLACK", "99.0000 BLACK", 
                   "100.0000 BLACK", "199.0000 BLACK", 
                   "200.0000 BLACK", "500.0000 BLACK");   
-                  
+
    ////////////////////
    // create project //
-   ////////////////////
-   
+   ////////////////////   
    // create project_1
    BOOST_REQUIRE_EQUAL( success(), create_eb( proj_1_owner,
                                                 proj_1_name, 
@@ -1774,7 +1767,6 @@ BOOST_FIXTURE_TEST_CASE( start_add_rm_drop, eb_factory_tester ) try {
    ////////////////////
    // select project //
    ////////////////////
-   
    vector<permission_level> perm = { { N(soula), config::active_name }, { N(soulb), config::active_name },
                                        {N(soulc), config::active_name}, {N(sould), config::active_name},
                                        {N(soule), config::active_name}, {N(soulf), config::active_name}

@@ -5,6 +5,7 @@ target_include_directories(eb.factory
    ${CMAKE_CURRENT_SOURCE_DIR}/include
    ${CMAKE_CURRENT_SOURCE_DIR}/../eosio.system/include
    ${CMAKE_CURRENT_SOURCE_DIR}/../eb.member/include)
+
    
 
 set_target_properties(eb.factory

@@ -19,7 +19,6 @@ void factory::create(name owner,
     require_auth( owner );         
     check(project_name.length() <= 32, "max project name length is 32");
     
-    // check membership
     member::ismember_action ismember("eb.member"_n, {get_self(), "active"_n});
     ismember.send(owner);    
 
