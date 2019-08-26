@@ -5,6 +5,7 @@
 #include <eosiolib/ignore.hpp>
 #include <eosiolib/transaction.hpp>
 #include <eosio.system/eosio.system.hpp>
+#include <eb.member/eb.member.hpp>
 
 #include <string>
 
