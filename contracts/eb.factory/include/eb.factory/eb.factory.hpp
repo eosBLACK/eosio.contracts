@@ -219,6 +219,7 @@ namespace eosio {
          
          uint64_t getProjectScope(uint64_t project_index);
          uint64_t target2Scope(string target);
+         uint64_t getProjectIndex();
    };
 
 } /// namespace eosio

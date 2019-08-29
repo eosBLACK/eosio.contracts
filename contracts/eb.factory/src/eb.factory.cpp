@@ -1,5 +1,7 @@
 #include <eb.factory/eb.factory.hpp>
 
+#include <algorithm> 
+
 namespace eosio {
     
 time_point current_time_point() {
@@ -35,7 +37,7 @@ void factory::create(name owner,
         uint64_t project_index;
         
         project_t.emplace(owner, [&](auto& a) {
-            a.index = project_t.available_primary_key();
+            a.index = getProjectIndex();
             a.owner = owner;
             a.proj_name = project_name;
             a.proj_name_hash = prj_name_hash;
@@ -492,6 +494,31 @@ uint64_t factory::target2Scope(string target) {
     } else {
         check(false, "target is incorrect");
     }
+    
+    return result;
+}
+
+uint64_t factory::getProjectIndex() {
+    uint64_t result;
+    
+    project_table project_t_created(_self, SCOPE_STATE_CREATED);
+    project_table project_t_selected(_self, SCOPE_STATE_SELECTED);
+    project_table project_t_readied(_self, SCOPE_STATE_READIED);
+    project_table project_t_started(_self, SCOPE_STATE_STARTED);
+    project_table project_t_dropped(_self, SCOPE_STATE_DROPPED);    
+    
+    int num1 = project_t_created.available_primary_key();
+    int num2 = project_t_selected.available_primary_key();
+    int num3 = project_t_readied.available_primary_key();
+    int num4 = project_t_started.available_primary_key();
+    int num5 = project_t_dropped.available_primary_key();
+    
+    int biggestNum = std::max(num1, num2);
+    biggestNum = std::max(biggestNum, num3);
+    biggestNum = std::max(biggestNum, num4);
+    biggestNum = std::max(biggestNum, num5);
+    
+    result = biggestNum;
     
     return result;
 }
