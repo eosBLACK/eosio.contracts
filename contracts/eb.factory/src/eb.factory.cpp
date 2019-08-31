@@ -299,8 +299,6 @@ void factory::select(uint64_t project_index,
 }
 
 void factory::start(uint64_t project_index,
-                     uint64_t detail_index,
-                     uint64_t resource_index,
                      name helper) {
     // need msig by representatives
     require_auth( _self );
@@ -313,7 +311,7 @@ void factory::start(uint64_t project_index,
     } else {
         // check existence of projectinfo
         projectinfo_table projectinfo_t(_self, project_index);
-        auto itr_projectinfo = projectinfo_t.find(detail_index);
+        auto itr_projectinfo = projectinfo_t.find(itr_readied->started_detail_index);
         if (itr_projectinfo == projectinfo_t.end()) {
             check(false, "non-projectinfo exist");
         } else {
@@ -340,8 +338,8 @@ void factory::start(uint64_t project_index,
                 a.proj_name_hash = itr_readied->proj_name_hash;
                 a.selected_detail_index = itr_readied->selected_detail_index;
                 a.selected_resource_index = itr_readied->selected_resource_index;                
-                a.started_detail_index = detail_index;
-                a.started_resource_index = resource_index;
+                a.started_detail_index = itr_readied->started_detail_index;
+                a.started_resource_index = itr_readied->started_resource_index; ;
             });  
             
             project_t_readied.erase(itr_readied);
