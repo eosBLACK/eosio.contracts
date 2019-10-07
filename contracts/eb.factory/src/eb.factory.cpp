@@ -1,5 +1,7 @@
 #include <eb.factory/eb.factory.hpp>
 
+#include <algorithm> 
+
 namespace eosio {
     
 time_point current_time_point() {
@@ -35,7 +37,7 @@ void factory::create(name owner,
         uint64_t project_index;
         
         project_t.emplace(owner, [&](auto& a) {
-            a.index = project_t.available_primary_key();
+            a.index = getProjectIndex();
             a.owner = owner;
             a.proj_name = project_name;
             a.proj_name_hash = prj_name_hash;
@@ -297,8 +299,6 @@ void factory::select(uint64_t project_index,
 }
 
 void factory::start(uint64_t project_index,
-                     uint64_t detail_index,
-                     uint64_t resource_index,
                      name helper) {
     // need msig by representatives
     require_auth( _self );
@@ -311,7 +311,7 @@ void factory::start(uint64_t project_index,
     } else {
         // check existence of projectinfo
         projectinfo_table projectinfo_t(_self, project_index);
-        auto itr_projectinfo = projectinfo_t.find(detail_index);
+        auto itr_projectinfo = projectinfo_t.find(itr_readied->started_detail_index);
         if (itr_projectinfo == projectinfo_t.end()) {
             check(false, "non-projectinfo exist");
         } else {
@@ -338,8 +338,8 @@ void factory::start(uint64_t project_index,
                 a.proj_name_hash = itr_readied->proj_name_hash;
                 a.selected_detail_index = itr_readied->selected_detail_index;
                 a.selected_resource_index = itr_readied->selected_resource_index;                
-                a.started_detail_index = detail_index;
-                a.started_resource_index = resource_index;
+                a.started_detail_index = itr_readied->started_detail_index;
+                a.started_resource_index = itr_readied->started_resource_index; ;
             });  
             
             project_t_readied.erase(itr_readied);
@@ -492,6 +492,31 @@ uint64_t factory::target2Scope(string target) {
     } else {
         check(false, "target is incorrect");
     }
+    
+    return result;
+}
+
+uint64_t factory::getProjectIndex() {
+    uint64_t result;
+    
+    project_table project_t_created(_self, SCOPE_STATE_CREATED);
+    project_table project_t_selected(_self, SCOPE_STATE_SELECTED);
+    project_table project_t_readied(_self, SCOPE_STATE_READIED);
+    project_table project_t_started(_self, SCOPE_STATE_STARTED);
+    project_table project_t_dropped(_self, SCOPE_STATE_DROPPED);    
+    
+    int num1 = project_t_created.available_primary_key();
+    int num2 = project_t_selected.available_primary_key();
+    int num3 = project_t_readied.available_primary_key();
+    int num4 = project_t_started.available_primary_key();
+    int num5 = project_t_dropped.available_primary_key();
+    
+    int biggestNum = std::max(num1, num2);
+    biggestNum = std::max(biggestNum, num3);
+    biggestNum = std::max(biggestNum, num4);
+    biggestNum = std::max(biggestNum, num5);
+    
+    result = biggestNum;
     
     return result;
 }

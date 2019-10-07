@@ -150,8 +150,6 @@ namespace eosio {
          
          [[eosio::action]]
          void start(uint64_t project_index,
-                     uint64_t detail_index,
-                     uint64_t resource_index,
                      name helper);
          
          [[eosio::action]]
@@ -219,6 +217,7 @@ namespace eosio {
          
          uint64_t getProjectScope(uint64_t project_index);
          uint64_t target2Scope(string target);
+         uint64_t getProjectIndex();
    };
 
 } /// namespace eosio

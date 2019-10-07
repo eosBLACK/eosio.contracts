@@ -1907,8 +1907,6 @@ BOOST_FIXTURE_TEST_CASE( start_add_rm_drop, eb_factory_tester ) try {
                ("authorization", action_perm_2)
                ("data", fc::mutable_variant_object()
                 ("project_index", project_1_index)
-                ("detail_index", project_1_info_1_2_index)
-                ("resource_index", resource_1_3_index)
                 ("helper", proj_1_helper)
                )
                })
