@@ -5,6 +5,7 @@
 #include <eosiolib/ignore.hpp>
 #include <eosiolib/transaction.hpp>
 #include <eosio.system/eosio.system.hpp>
+#include <eb.cryptob/eb.cryptob.hpp>
 #include <eb.member/eb.member.hpp>
 
 #include <string>
@@ -84,6 +85,16 @@ namespace eosio {
       
       EOSLIB_SERIALIZE( notice, (index)(project_index)(proposer)(proposal) )
    };   
+   
+   struct [[eosio::table,eosio::contract("eb.factory")]] token {
+      uint64_t index;
+      name issuer;
+      asset maximum_supply;
+
+      uint64_t primary_key() const {return index;}
+      
+      EOSLIB_SERIALIZE( token, (index)(issuer)(maximum_supply) )
+   };    
 
    typedef eosio::multi_index< "projects"_n, project, indexed_by<name("projnamehash"), const_mem_fun<project, checksum256, &project::by_proj_name_hash>> > project_table;
    typedef eosio::multi_index< "projectinfos"_n, projectinfo > projectinfo_table;
@@ -91,6 +102,7 @@ namespace eosio {
    typedef eosio::multi_index< "payments"_n, payment > payment_table;
    typedef eosio::multi_index< "helpers"_n, helper > helper_table;
    typedef eosio::multi_index< "notices"_n, notice, indexed_by<name("projindex"), const_mem_fun<notice, uint64_t, &notice::by_proj_index>> > notice_table;
+   typedef eosio::multi_index< "tokens"_n, token > token_table;
 
    class [[eosio::contract("eb.factory")]] factory : public contract {
       public:
@@ -132,6 +144,11 @@ namespace eosio {
                         uint64_t payment_index);
          
          [[eosio::action]]
+         void settoken(uint64_t project_index,
+                           name issuer,
+                           asset maximum_supply);
+         
+         [[eosio::action]]
          void setready(uint64_t project_index,
                         uint64_t detail_index,
                         uint64_t resource_index);
@@ -163,6 +180,9 @@ namespace eosio {
          [[eosio::action]]
          void popnotice(uint64_t project_index,
                         string target);
+                        
+         [[eosio::action]]
+         void delstartproj(uint64_t project_index);                        
 
          using create_action = eosio::action_wrapper<"create"_n, &factory::create>;
          using addinfo_action = eosio::action_wrapper<"addinfo"_n, &factory::addinfo>;
@@ -170,6 +190,7 @@ namespace eosio {
          using rmresource_action = eosio::action_wrapper<"rmresource"_n, &factory::rmresource>;
          using addpayment_action = eosio::action_wrapper<"addpayment"_n, &factory::addpayment>;
          using rmpayment_action = eosio::action_wrapper<"rmpayment"_n, &factory::rmpayment>;
+         using settoken_action = eosio::action_wrapper<"settoken"_n, &factory::settoken>;
          using setready_action = eosio::action_wrapper<"setready"_n, &factory::setready>;
          using cancelready_action = eosio::action_wrapper<"cancelready"_n, &factory::cancelready>;
          using drop_action = eosio::action_wrapper<"drop"_n, &factory::drop>;
@@ -177,6 +198,7 @@ namespace eosio {
          using start_action = eosio::action_wrapper<"start"_n, &factory::start>;
          using pushnotice_action = eosio::action_wrapper<"pushnotice"_n, &factory::pushnotice>;
          using popnotice_action = eosio::action_wrapper<"popnotice"_n, &factory::popnotice>;         
+         using delstartproj_action = eosio::action_wrapper<"delstartproj"_n, &factory::delstartproj>;     
          
       private:
          const string STATE_CREATED = "created";
