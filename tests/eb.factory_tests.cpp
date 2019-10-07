@@ -2528,11 +2528,11 @@ BOOST_FIXTURE_TEST_CASE( start_create_token, eb_factory_tester ) try {
    BOOST_REQUIRE_EQUAL( false, bool(trace_3) );
    
    
-   auto stats = get_stats("4,PROA");
+   auto stats = get_stats("3,TOKENB");
    REQUIRE_MATCHING_OBJECT( stats, mvo()
-      ("supply", "0.0000 PROA")
-      ("max_supply", "1000000.0000 PROA")
-      ("issuer", "eosio")
+      ("supply", "0.000 TOKENB")
+      ("max_supply", "10000000000000.000 TOKENB")
+      ("issuer", "eosoulhammer")
    );    
    
    

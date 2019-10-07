@@ -155,15 +155,15 @@ void factory::settoken(uint64_t project_index,
         require_auth(itr->owner);
         
         token_table token_t(_self, project_index);
-        auto itr_projectinfo = token_t.find(0);
-        if (itr_projectinfo == token_t.end()) {
+        auto itr_tokeninfo = token_t.find(0);
+        if (itr_tokeninfo == token_t.end()) {
             token_t.emplace(itr->owner, [&](auto& a) {
                 a.index = 0;
                 a.issuer = issuer;
                 a.maximum_supply = maximum_supply;
             }); 
         } else {
-            token_t.modify( itr_projectinfo, _self, [&]( auto& a ) {
+            token_t.modify( itr_tokeninfo, _self, [&]( auto& a ) {
                 a.index = 0;
                 a.issuer = issuer;
                 a.maximum_supply = maximum_supply;
@@ -384,9 +384,16 @@ void factory::start(uint64_t project_index,
             project_t_readied.erase(itr_readied);
             
             // create new Token
-            cryptob::create_action create("eb.cryptob"_n, {"eb.cryptob"_n, "active"_n});
-            create.send("eosio"_n, asset( 10000000000, symbol("PROA", 4)));
-            
+            token_table token_t(_self, project_index);
+            auto itr_tokeninfo = token_t.find(0);
+            if (itr_tokeninfo == token_t.end()) {
+                check(false, "token info doesn't exist");
+            } else {
+                cryptob::create_action create("eb.cryptob"_n, {"eb.cryptob"_n, "active"_n});
+                //create.send("eosio"_n, asset( 10000000000, symbol("PROA", 4)));
+                create.send(itr_tokeninfo->issuer, itr_tokeninfo->maximum_supply);
+            } 
+
             // TODO BY SOULHAMMER
             // add data in "helpers" table    
         } else {
