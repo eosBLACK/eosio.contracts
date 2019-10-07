@@ -146,6 +146,36 @@ void factory::rmpayment(uint64_t project_index,
     }
 }
 
+void factory::settoken(uint64_t project_index,
+                           name issuer,
+                           asset maximum_supply) {
+    uint64_t detectedScope = getProjectScope(project_index);
+    
+    if (detectedScope == SCOPE_STATE_CREATED || detectedScope == SCOPE_STATE_SELECTED) {
+        project_table project_t(_self, detectedScope);
+        auto itr = project_t.find(project_index);  
+        require_auth(itr->owner);
+        
+        token_table token_t(_self, project_index);
+        auto itr_tokeninfo = token_t.find(0);
+        if (itr_tokeninfo == token_t.end()) {
+            token_t.emplace(itr->owner, [&](auto& a) {
+                a.index = 0;
+                a.issuer = issuer;
+                a.maximum_supply = maximum_supply;
+            }); 
+        } else {
+            token_t.modify( itr_tokeninfo, _self, [&]( auto& a ) {
+                a.index = 0;
+                a.issuer = issuer;
+                a.maximum_supply = maximum_supply;
+            });
+        }         
+    } else {
+        check(false, "setting token is impossible in current state");
+    }
+}
+
 void factory::drop(uint64_t project_index) {
     uint64_t detectedScope = getProjectScope(project_index);
     
@@ -183,7 +213,16 @@ void factory::setready(uint64_t project_index,
     auto itr_selected = project_t_selected.find(project_index);  
     if (itr_selected != project_t_selected.end()) {
         // only project owner has permission
-        require_auth(itr_selected->owner);      
+        require_auth(itr_selected->owner);    
+        
+        // check token table
+        token_table token_t(_self, project_index);
+        auto itr_projectinfo = token_t.find(0);
+        if (itr_projectinfo == token_t.end()) {
+            check(false, "created token info doesn't exist");
+        } else {
+            
+        }   
         
         // move data in projects (scope: selected -> readied)
         project_table project_t_readied(_self, SCOPE_STATE_READIED);    
@@ -344,8 +383,19 @@ void factory::start(uint64_t project_index,
             
             project_t_readied.erase(itr_readied);
             
+            // create new Token
+            token_table token_t(_self, project_index);
+            auto itr_tokeninfo = token_t.find(0);
+            if (itr_tokeninfo == token_t.end()) {
+                check(false, "token info doesn't exist");
+            } else {
+                cryptob::create_action create("eb.cryptob"_n, {"eb.cryptob"_n, "active"_n});
+                //create.send("eosio"_n, asset( 10000000000, symbol("PROA", 4)));
+                create.send(itr_tokeninfo->issuer, itr_tokeninfo->maximum_supply);
+            } 
+
             // TODO BY SOULHAMMER
-            // add data in "helpers" table            
+            // add data in "helpers" table    
         } else {
             check(false, "already project was selected");
         }        
@@ -383,6 +433,16 @@ void factory::popnotice(uint64_t index,
         notice_t.erase(itr);
     } else {
         check(false, "non-project exist");   
+    } 
+}
+
+void factory::delstartproj(uint64_t project_index) {
+    project_table project_t_started(_self, SCOPE_STATE_STARTED);    
+    auto itr_started = project_t_started.find(project_index);
+    if (itr_started == project_t_started.end()) {
+        check(false, "project doesn't exist");   
+    } else {
+        project_t_started.erase(itr_started);
     } 
 }
 
@@ -523,6 +583,7 @@ uint64_t factory::getProjectIndex() {
 
 } /// namespace eosio
 
-EOSIO_DISPATCH( eosio::factory, (create)(addinfo)(addresource)(rmresource)(addpayment)(rmpayment)
-                                (setready)(cancelready)(drop)(select)(start)(pushnotice)(popnotice) )
+EOSIO_DISPATCH( eosio::factory, (create)(addinfo)(addresource)(rmresource)(addpayment)(rmpayment)(settoken)
+                                (setready)(cancelready)(drop)(select)(start)(pushnotice)(popnotice)
+                                (delstartproj))
 
