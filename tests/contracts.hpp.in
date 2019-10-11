@@ -31,6 +31,9 @@ struct contracts {
    static std::vector<uint8_t> cryptob_wasm() { return read_wasm("${CMAKE_BINARY_DIR}/../contracts/eb.cryptob/eb.cryptob.wasm"); }
    static std::string          cryptob_wast() { return read_wast("${CMAKE_BINARY_DIR}/../contracts/eb.cryptob/eb.cryptob.wast"); }
    static std::vector<char>    cryptob_abi() { return read_abi("${CMAKE_BINARY_DIR}/../contracts/eb.cryptob/eb.cryptob.abi"); }    
+   static std::vector<uint8_t> cryptor_wasm() { return read_wasm("${CMAKE_BINARY_DIR}/../contracts/eb.cryptor/eb.cryptor.wasm"); }
+   static std::string          cryptor_wast() { return read_wast("${CMAKE_BINARY_DIR}/../contracts/eb.cryptor/eb.cryptor.wast"); }
+   static std::vector<char>    cryptor_abi() { return read_abi("${CMAKE_BINARY_DIR}/../contracts/eb.cryptor/eb.cryptor.abi"); }   
 
    struct util {
       static std::vector<uint8_t> test_api_wasm() { return read_wasm("${CMAKE_SOURCE_DIR}/test_contracts/test_api.wasm"); }

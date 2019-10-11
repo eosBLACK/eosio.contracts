@@ -23,7 +23,7 @@ public:
    const char *members_str[4]={ "participants","supporters", "reprecandi" }; 
 
    eb_factory_tester() {
-      create_accounts( { N(eb.factory), N(eb.member), N(eosio.msig), N(eosio.stake), N(eosio.ram), N(eosio.ramfee), N(eb.cryptob) } );
+      create_accounts( { N(eb.factory), N(eb.member), N(eosio.msig), N(eosio.stake), N(eosio.ram), N(eosio.ramfee), N(eb.cryptob), N(eb.cryptor) } );
       
       produce_block();      
       
@@ -101,6 +101,24 @@ public:
                                                ("is_priv", 1)
          );
       } 
+      
+      // deploy eb.cryptor
+      set_code( N(eb.cryptor), contracts::cryptor_wasm());
+      set_abi( N(eb.cryptor), contracts::cryptor_abi().data() );
+      {
+         const auto& accnt = control->db().get<account_object,by_name>( N(eb.cryptor) );
+         abi_def abi;
+         BOOST_REQUIRE_EQUAL(abi_serializer::to_abi(accnt.abi, abi), true);
+         cryptor_abi_ser.set_abi(abi, abi_serializer_max_time);
+      } 
+      
+      {
+         auto trace = base_tester::push_action(config::system_account_name, N(setpriv),
+                                               config::system_account_name,  mutable_variant_object()
+                                               ("account", "eb.cryptor")
+                                               ("is_priv", 1)
+         );
+      }      
    }
 
    transaction_trace_ptr create_account_with_resources( account_name a, account_name creator, asset ramfunds, bool multisig,
@@ -236,6 +254,17 @@ public:
 
          return base_tester::push_action( std::move(act), auth ? uint64_t(signer) : signer == N(bob) ? N(alice) : N(bob) );
    }
+   
+   action_result push_action_eb_cryptor( const account_name& signer, const action_name &name, const variant_object &data, bool auth = true ) {
+         string action_type_name = cryptor_abi_ser.get_action_type(name);
+
+         action act;
+         act.account = N(eb.cryptor);
+         act.name = name;
+         act.data = cryptor_abi_ser.variant_to_binary( action_type_name, data, abi_serializer_max_time );
+
+         return base_tester::push_action( std::move(act), auth ? uint64_t(signer) : signer == N(bob) ? N(alice) : N(bob) );
+   }   
 
    // For membership checking, call inline-action internally 
    // eb.member -> ismember()
@@ -417,6 +446,20 @@ public:
                           ("transfer", 0 )
       );
    }   
+   
+   action_result gettoken( const account_name& from, const uint64_t& project_index, const account_name& receiver ) {
+      return push_action_eb_cryptor( name(from), N(gettoken), mvo()
+                          ("project_index", project_index)
+                          ("receiver", receiver)
+      );
+   }    
+   
+   action_result getram( const account_name& from, const uint64_t& project_index, const account_name& receiver ) {
+      return push_action_eb_cryptor( name(from), N(getram), mvo()
+                          ("project_index", project_index)
+                          ("receiver", receiver)
+      );
+   }     
 
    fc::variant get_criteria(const name& account)
    {
@@ -518,6 +561,10 @@ public:
       BOOST_REQUIRE_EQUAL( core_sym::from_string("0.0000"), get_balance( "carol" ) );
       transfer( "eosio", "carol", "5000.0000  BLACK", "eosio" );
       BOOST_REQUIRE_EQUAL( core_sym::from_string("5000.0000"), get_balance( "carol" ) );
+      
+      BOOST_REQUIRE_EQUAL( core_sym::from_string("0.0000"), get_balance( "eb.cryptor" ) );
+      transfer( "eosio", "eb.cryptor", "10000000.0000  BLACK", "eosio" );
+      BOOST_REQUIRE_EQUAL( core_sym::from_string("10000000.0000"), get_balance( "eb.cryptor" ) );      
 
       // total staking amount: 50
       BOOST_REQUIRE_EQUAL( success(), stake_eb_member( "alice", "alice", core_sym::from_string("15.0000"), core_sym::from_string("15.0000") ) );
@@ -529,6 +576,7 @@ public:
    abi_serializer msig_abi_ser;
    abi_serializer member_abi_ser;
    abi_serializer cryptob_abi_ser;
+   abi_serializer cryptor_abi_ser;
 };
 
 transaction eb_factory_tester::reqauth( account_name from, const vector<permission_level>& auths, const fc::microseconds& max_serialization_time ) {
@@ -615,11 +663,11 @@ asset black_max_count_2 = core_sym::from_string("300.0000");
 uint64_t ram_max_size_3 = 100;
 asset black_max_count_3 = core_sym::from_string("10.0000");   
 
-uint64_t aftertime_1 = 10000;
+uint64_t aftertime_1 = 1577836863 - 30;
 int8_t percentage_1 = 40;
-uint64_t aftertime_2 = 20000;
+uint64_t aftertime_2 = 1577836863 - 20;
 int8_t percentage_2 = 60;   
-uint64_t aftertime_3 = 30000;
+uint64_t aftertime_3 = 1577836863 - 10;
 int8_t percentage_3 = 60; 
 
 BOOST_FIXTURE_TEST_CASE( create_add_rm_drop, eb_factory_tester ) try {
@@ -2441,6 +2489,37 @@ BOOST_FIXTURE_TEST_CASE( start_create_token, eb_factory_tester ) try {
    BOOST_REQUIRE_EQUAL(proj_1_started["selected_resource_index"].as_uint64(), resource_1_2_index);    
    BOOST_REQUIRE_EQUAL(proj_1_started["started_detail_index"].as_uint64(), project_1_info_1_2_index);
    BOOST_REQUIRE_EQUAL(proj_1_started["started_resource_index"].as_uint64(), resource_1_3_index);   
+   
+   
+   
+   // get reward token
+   
+   BOOST_REQUIRE_EQUAL( core_sym::from_string("4970.0000"), get_balance( "alice" ) );
+   BOOST_REQUIRE_EQUAL( success(), gettoken( proj_1_owner,
+                                                project_1_index,
+                                                proj_1_owner ) );     
+   BOOST_REQUIRE_EQUAL( core_sym::from_string("4986.0000"), get_balance( "alice" ) );
+   
+   BOOST_REQUIRE_EQUAL( success(), gettoken( proj_1_owner,
+                                                project_1_index,
+                                                proj_1_owner ) );     
+   BOOST_REQUIRE_EQUAL( core_sym::from_string("4986.0000"), get_balance( "alice" ) );   
+   
+   
+   BOOST_REQUIRE_EQUAL( core_sym::from_string("9999984.0000"), get_balance( "eb.cryptor" ) );   
+   
+   // get reward ram
+   BOOST_REQUIRE_EQUAL( success(), getram( proj_1_owner,
+                                                project_1_index,
+                                                proj_1_owner ) );     
+   
+   BOOST_REQUIRE_EQUAL( core_sym::from_string("9999983.9986"), get_balance( "eb.cryptor" ) );   
+   
+   BOOST_REQUIRE_EQUAL( success(), getram( proj_1_owner,
+                                                project_1_index,
+                                                proj_1_owner ) );     
+   
+   BOOST_REQUIRE_EQUAL( core_sym::from_string("9999983.9986"), get_balance( "eb.cryptor" ) );      
    
    ///////////////////////////////
    // add & remove project data //
